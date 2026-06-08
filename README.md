@@ -21,7 +21,7 @@ Core systems include:
 - Social Hub UI and Supabase-backed social data manager.
 - Inventory metadata and product bundling tools for marketplace-ready digital assets.
 - Embodied AI components for perception, vision, movement, memory, voice, and spatial behavior.
-- Editor tooling for SDK dashboard, validation, deployment, Netlify/GitHub deployment support, and SDK update checks.
+- Editor tooling for SDK dashboard, validation, deployment, Netlify/Vercel/GitHub deployment support, and SDK update checks.
 
 ## Installation
 
@@ -225,7 +225,9 @@ MetaDyn is WebGL-first. Production deployments should use:
 - WebSocket-compatible hosting/proxy configuration for UGS Relay/Vivox flows.
 - A CDN such as Cloudflare or equivalent edge caching for build files.
 
-The SDK includes deployment tooling for server, Netlify, and GitHub-oriented workflows, but each production environment should still verify headers, compression, routing, and auth-domain behavior.
+The SDK includes deployment tooling for server, Netlify, Vercel, and GitHub-oriented workflows, but each production environment should still verify headers, compression, routing, and auth-domain behavior.
+
+GitHub Pages deployments use an atomic Git Data API pipeline: WebGL build files are uploaded as Git blobs, assembled into one tree and commit, then published by updating `gh-pages` after every file is ready. GitHub blocks repository files larger than 100 MiB, so larger WebGL builds should use Vercel, Netlify, or another static host that supports large Unity data files.
 
 ## Versioning And Releases
 

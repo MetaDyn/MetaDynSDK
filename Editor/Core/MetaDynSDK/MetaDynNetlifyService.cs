@@ -23,9 +23,9 @@ namespace MetaDyn
         /// Compresses the build directory and uploads it directly to Netlify.
         /// </summary>
         public static async void DeployToNetlify(
-            string localPath, 
-            MetaDynServerProfile profile, 
-            ProgressCallback onProgress = null, 
+            string localPath,
+            MetaDynServerProfile profile,
+            ProgressCallback onProgress = null,
             CompletionCallback onComplete = null)
         {
             string tempZip = "";
@@ -41,7 +41,7 @@ namespace MetaDyn
                     siteId = await CreateSite(profile);
                     if (string.IsNullOrEmpty(siteId)) throw new Exception("Failed to create Netlify site.");
                 }
-                else if (!string.IsNullOrEmpty(profile.netlifySubdomain) && 
+                else if (!string.IsNullOrEmpty(profile.netlifySubdomain) &&
                          (string.IsNullOrEmpty(profile.deployedURL) || !profile.deployedURL.Contains(profile.netlifySubdomain)))
                 {
                     // If the site exists but the URL doesn't match the desired name, try to rename it again
@@ -55,10 +55,10 @@ namespace MetaDyn
 
                 // 2. Zip the folder
                 onProgress?.Invoke(0.3f, "Compressing build (this may take a moment for large files)...");
-tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.zip");
-                
+                tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.zip");
+
                 if (File.Exists(tempZip)) File.Delete(tempZip);
-                
+
                 // Zip creation - use Task.Run to keep UI responsive
                 await Task.Run(() => ZipFile.CreateFromDirectory(localPath, tempZip));
 
@@ -85,10 +85,10 @@ tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.z
         {
             // We generate both _headers and netlify.toml for maximum compatibility across Netlify's deployment engines
             // These rules specifically target Unity 6 WebGL build output patterns, including spaces and nested paths.
-            
+
             string headersPath = Path.Combine(buildPath, "_headers");
             string tomlPath = Path.Combine(buildPath, "netlify.toml");
-            
+
             var utf8NoBOM = new UTF8Encoding(false);
 
             // 1. Generate _headers
@@ -186,7 +186,7 @@ tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.z
                 request.downloadHandler = new DownloadHandlerBuffer();
                 SetHeaders(request, p.netlifyToken);
                 request.SetRequestHeader("Content-Type", "application/json");
-                
+
                 var operation = request.SendWebRequest();
                 while (!operation.isDone) await Task.Yield();
 
@@ -244,7 +244,7 @@ tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.z
                     Debug.Log($"[MetaDyn Netlify] Successfully set custom subdomain: {targetName}");
                     return true;
                 }
-                
+
                 string errorDetail = request.downloadHandler.text;
                 Debug.LogWarning($"[MetaDyn Netlify] Rename to '{targetName}' failed: {request.error}\nResponse: {errorDetail}");
                 return false;
@@ -254,7 +254,7 @@ tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.z
         private static async Task<string> UploadZip(MetaDynServerProfile p, string siteId, string zipPath, ProgressCallback onProgress)
         {
             byte[] zipData = File.ReadAllBytes(zipPath);
-            
+
             using (UnityWebRequest request = new UnityWebRequest($"{NETLIFY_API}/sites/{siteId}/deploys", "POST"))
             {
                 request.uploadHandler = new UploadHandlerRaw(zipData);
@@ -263,7 +263,7 @@ tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.z
                 SetHeaders(request, p.netlifyToken);
 
                 var operation = request.SendWebRequest();
-                
+
                 while (!operation.isDone)
                 {
                     onProgress?.Invoke(0.5f + (operation.progress * 0.45f), $"Uploading build... {operation.progress * 100:F0}%");
@@ -279,7 +279,7 @@ tempZip = Path.Combine(Path.GetTempPath(), $"metadyn_deploy_{Guid.NewGuid():N}.z
                 // Get the final URL from the response
                 var match = System.Text.RegularExpressions.Regex.Match(resp, "\"ssl_url\":\"(.*?)\"");
                 if (!match.Success) match = System.Text.RegularExpressions.Regex.Match(resp, "\"url\":\"(.*?)\"");
-                
+
                 return match.Success ? match.Groups[1].Value : "https://app.netlify.com";
             }
         }

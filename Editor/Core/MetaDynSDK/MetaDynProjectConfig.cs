@@ -793,7 +793,7 @@ namespace MetaDyn
         }
 
         private void CreateNewRuntimeConfig()
-{
+        {
             // Create Resources folder if needed
             string resourcesPath = "Assets/Resources";
             if (!AssetDatabase.IsValidFolder(resourcesPath))
@@ -830,7 +830,7 @@ namespace MetaDyn
         {
             // Server Profile Selection
             EditorGUILayout.BeginHorizontal();
-GUILayout.Label("Server Profile:", GUILayout.Width(100));
+            GUILayout.Label("Server Profile:", GUILayout.Width(100));
 
             if (serverProfiles.Count == 0)
             {
@@ -898,6 +898,10 @@ GUILayout.Label("Server Profile:", GUILayout.Width(100));
                 {
                     DrawNetlifyConfiguration();
                 }
+                else if (selectedProfile.deploymentType == DeploymentType.Vercel)
+                {
+                    DrawVercelConfiguration();
+                }
 
                 EditorGUILayout.EndVertical();
             }
@@ -963,6 +967,43 @@ GUILayout.Label("Server Profile:", GUILayout.Width(100));
             }
         }
 
+        private void DrawVercelConfiguration()
+        {
+            EditorGUI.BeginChangeCheck();
+            string token = EditorGUILayout.PasswordField("Vercel Token:", selectedProfile.vercelToken);
+            string project = EditorGUILayout.TextField(new GUIContent("Project Name:", "Leave empty to use a sanitized room name"), selectedProfile.vercelProjectName);
+            string teamId = EditorGUILayout.TextField(new GUIContent("Team ID:", "Optional. Leave empty for personal Vercel account deployments."), selectedProfile.vercelTeamId);
+            bool production = EditorGUILayout.Toggle(new GUIContent("Production:", "Deploy to Vercel production target instead of preview."), selectedProfile.vercelProduction);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(selectedProfile, "Edit Vercel Profile");
+                selectedProfile.vercelToken = token;
+                selectedProfile.vercelProjectName = project;
+                selectedProfile.vercelTeamId = teamId;
+                selectedProfile.vercelProduction = production;
+                EditorUtility.SetDirty(selectedProfile);
+            }
+
+            if (string.IsNullOrEmpty(selectedProfile.vercelToken))
+            {
+                EditorGUILayout.HelpBox("Enter a Vercel API token from Account Settings > Tokens.", MessageType.Warning);
+            }
+            else
+            {
+                string projectName = string.IsNullOrEmpty(selectedProfile.vercelProjectName) ?
+                    System.Text.RegularExpressions.Regex.Replace(selectedRuntimeConfig != null ? selectedRuntimeConfig.roomName : "metadyn-space", "[^a-zA-Z0-9-]", "-").ToLower() :
+                    selectedProfile.vercelProjectName;
+
+                EditorGUILayout.HelpBox("Deployment will upload the WebGL build through the Vercel API and include vercel.json headers for Brotli/gzip Unity assets.", MessageType.Info);
+                EditorGUILayout.LabelField("Project:", projectName, EditorStyles.miniLabel);
+                if (!string.IsNullOrEmpty(selectedProfile.deployedURL))
+                {
+                    EditorGUILayout.LabelField("Last URL:", selectedProfile.deployedURL, EditorStyles.miniLabel);
+                }
+            }
+        }
+
         private void DrawGitHubConfiguration()
         {
             EditorGUI.BeginChangeCheck();
@@ -997,7 +1038,7 @@ GUILayout.Label("Server Profile:", GUILayout.Width(100));
         {
             // Deployment requirements check
             bool canDeploy = selectedRuntimeConfig != null &&
-selectedRuntimeConfig.IsValid() &&
+                           selectedRuntimeConfig.IsValid() &&
                            Directory.Exists(buildPath) &&
                            selectedProfile != null &&
                            selectedProfile.IsValid() &&
@@ -1018,6 +1059,7 @@ selectedRuntimeConfig.IsValid() &&
             {
                 if (selectedProfile.deploymentType == DeploymentType.GitHub) btnLabel = "🚀 DEPLOY TO GITHUB";
                 else if (selectedProfile.deploymentType == DeploymentType.Netlify) btnLabel = "🚀 DEPLOY TO NETLIFY";
+                else if (selectedProfile.deploymentType == DeploymentType.Vercel) btnLabel = "🚀 DEPLOY TO VERCEL";
                 else btnLabel = "🚀 DEPLOY TO SERVER";
             }
 
@@ -1163,7 +1205,9 @@ selectedRuntimeConfig.IsValid() &&
                         selectedProfile.githubRepo;
                     selectedRuntimeConfig.deploymentURL = $"https://{selectedProfile.githubUsername}.github.io/{repoName}/";
                 }
-                else if (selectedProfile.deploymentType == DeploymentType.Netlify && !string.IsNullOrEmpty(selectedProfile.deployedURL))
+                else if ((selectedProfile.deploymentType == DeploymentType.Netlify ||
+                          selectedProfile.deploymentType == DeploymentType.Vercel) &&
+                         !string.IsNullOrEmpty(selectedProfile.deployedURL))
                 {
                     selectedRuntimeConfig.deploymentURL = selectedProfile.deployedURL;
                 }
@@ -1209,6 +1253,16 @@ selectedRuntimeConfig.IsValid() &&
                     selectedProfile,
                     OnDeployProgress,
                     OnNetlifyDeployComplete
+                );
+            }
+            else if (selectedProfile.deploymentType == DeploymentType.Vercel)
+            {
+                MetaDynVercelService.DeployToVercel(
+                    buildPath,
+                    selectedProfile,
+                    selectedRuntimeConfig.roomName,
+                    OnDeployProgress,
+                    OnVercelDeployComplete
                 );
             }
             else if (selectedProfile.deploymentType == DeploymentType.GitHub)
@@ -1262,6 +1316,24 @@ selectedRuntimeConfig.IsValid() &&
                 {
                     Undo.RecordObject(selectedProfile, "Update Netlify Site Info");
                     selectedProfile.netlifySiteId = siteId;
+                    selectedProfile.deployedURL = url;
+                    EditorUtility.SetDirty(selectedProfile);
+
+                    // Update runtime config with final URL
+                    UpdateRuntimeConfig();
+                }
+
+                OnDeployComplete(success, message);
+            };
+        }
+
+        private void OnVercelDeployComplete(bool success, string message, string url)
+        {
+            UnityEditor.EditorApplication.delayCall += () =>
+            {
+                if (success && selectedProfile != null)
+                {
+                    Undo.RecordObject(selectedProfile, "Update Vercel Deployment URL");
                     selectedProfile.deployedURL = url;
                     EditorUtility.SetDirty(selectedProfile);
 
