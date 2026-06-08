@@ -1,0 +1,38 @@
+{
+  "sdkName": "MetaDyn SDK",
+  "channel": "stable",
+  "latestVersion": "1.2.0",
+  "minimumSupportedVersion": "1.1.0",
+  "unity": {
+    "minimumVersion": "6000.0.62f1",
+    "recommendedVersion": "6000.0.67f1"
+  },
+  "networking": {
+    "provider": "Unity Gaming Services",
+    "NGO": "2.1.0",
+    "lobby": "1.2.1",
+    "relay": "1.1.0",
+    "vivox": "16.4.2"
+  },
+  "fusion": {
+    "required": false,
+    "supportedVersion": "2.0.9 Stable",
+    "minimumVersion": "2.0.9"
+  },
+  "releaseNotesUrl": "https://github.com/MetaDyn/MetaDynSDK/releases/tag/v1.2.0",
+  "downloadUrl": "https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.2.0.zip",
+"packageRoot": "Assets",
+  "trackedRoots": [
+    "Assets/MetaDyn",
+    "Assets/Common",
+    "Assets/Plugins/WebGL",
+    "Assets/Starter/Scripts/PlayerInput.cs"
+  ],
+  "optionalComponents": [],
+  "notices": [
+{
+      "type": "info",
+      "message": "MetaDyn Master SDK is now powered by Unity Gaming Services."
+    }
+  ]
+}

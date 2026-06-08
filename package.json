@@ -1,0 +1,25 @@
+{
+  "name": "com.metadyn.sdk",
+  "displayName": "MetaDyn Master SDK",
+  "version": "1.2.0",
+  "unity": "6000.0",
+  "description": "Enterprise-grade spatial AI and networking SDK for Unity Gaming Services.",
+  "keywords": [
+    "metadyn",
+    "ugs",
+    "ngo",
+    "ai",
+    "spatial"
+  ],
+  "dependencies": {
+    "com.unity.netcode.gameobjects": "2.1.0",
+    "com.unity.services.lobby": "1.2.1",
+    "com.unity.services.relay": "1.1.0",
+    "com.unity.services.vivox": "16.4.2",
+    "com.unity.cloud.gltfast": "6.11.0"
+  },
+  "author": {
+    "name": "MetaDyn",
+    "url": "https://metadyn.xyz"
+  }
+}

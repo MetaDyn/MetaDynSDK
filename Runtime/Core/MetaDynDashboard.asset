@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22ce8738872f4e443afd0a13c967d7be, type: 3}
+  m_Name: MetaDynDashboard
+  m_EditorClassIdentifier: 
+  SupabaseUrl: https://jsmtunqrghxodpvysbjt.supabase.co
+  AnonKey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpzbXR1bnFyZ2h4b2RwdnlzYmp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjExNjc3MDYsImV4cCI6MjA3Njc0MzcwNn0.jperR0QjgFhX-J-or-v6Xu2cepHUF6h4K4nTNkkYNfY
+  Instructions: 'Get these values from your Supabase Dashboard:
+
+    1. Go to Settings
+    > API
+
+    2. Copy ''Project URL'' to SupabaseUrl
+
+    3. Copy ''anon/public''
+    key to AnonKey
+
+
+    These should match the values in your React dashboard''s
+    supabaseClient.ts'

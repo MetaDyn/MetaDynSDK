@@ -1,0 +1,29 @@
+{
+    "name": "MetaDyn.Editor",
+    "rootNamespace": "MetaDyn.Editor",
+    "references": [
+        "MetaDyn.Runtime",
+        "Unity.Netcode.Runtime",
+        "Unity.Netcode.Editor",
+        "Unity.Netcode.Components",
+        "Unity.Services.Core",
+        "Unity.Services.Authentication",
+        "Unity.Services.Multiplayer",
+        "Unity.Networking.Transport",
+        "Unity.TextMeshPro",
+        "UnityEngine.UI",
+        "glTFast",
+        "glTFast.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

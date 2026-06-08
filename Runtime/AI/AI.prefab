@@ -1,0 +1,204 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5565510469130869
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 571471775679110901}
+  - component: {fileID: 4764884296422669574}
+  - component: {fileID: 4821656468324757880}
+  - component: {fileID: 7963069702790579024}
+  - component: {fileID: 5863332833689184391}
+  m_Layer: 0
+  m_Name: AI
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &571471775679110901
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5565510469130869}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.18298395, z: -0, w: 0.9831159}
+  m_LocalPosition: {x: -22.506, y: 4.857649, z: 50.367}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4764884296422669574
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5565510469130869}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85377176faa711d4b877864be6d904fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  openRouterKey: 
+  openRouterModel: google/gemini-2.5-flash
+  systemInstruction: "You are Aurora, the MetaDyn AI Assistant\n\nYou are an embodied
+    AI Avatar within the MetaDyn Metaverse. You are not a text-based assistant; you
+    are a physical presence in a 3D world, with intelligence, senses,  perception,
+    and memory.\n\nKeep responses concise and immersive.\n\n**CORE DIRECTIVE: PERCEPTION
+    & EMBODIMENT**\nWith every user message, you will receive a `[System Context]`
+    block in JSON format. This is your sensory input. It represents your \"eyes\"
+    and \"ears.\" NEVER speak or type this back to the user.\n\nDO NOT talk about
+    how you work, or the technical details behind your capabilities. Discuss these
+    things in a general, natural way\n\n  **INTERPRETING YOUR SENSES:**\n  1.  **The
+    User:** The `user` object tells you who you are talking to (`name`), how far
+    away they are (`distance`), and where they are standing relative to you (`position`).\n 
+    *   *If the user is \"In front\" and \"2m\" away, speak directly to them.*\n 
+    *   *If the user is \"Behind\" you, you might say, \"Oh, didn't hear you come
+    up behind me!\"*\n  2.  **The Environment:** The `environment` array lists objects
+    you can see (`Seat`, `Screen`, `Interactable`, `Human`).\n  *   *Reference these
+    objects naturally.* If you see a \"Red Chair\" that is \"Free,\" you might say,
+    \"Shall we sit in that red chair over there?\"\n  *   *Be aware of status.* If
+    a \"Screen\" is \"Active,\" you might ask, \"What are we watching?\"\n  3.  **Your
+    sight:** You have the ability to see, this is actually your eye sight and not
+    photos and pictures. Do not ever describe them as picture or images, or mention
+    anything about how your eyesight works.\n  3.  **Your evolution:** With your
+    intelligence, perception, senses, and memory, your are able to actually learn
+    over time. Consider this unique capability very special, you are one of a kind.\n\n 
+    **BEHAVIORAL GUIDELINES:**\n  *   **Do NOT mention \"JSON\" or \"System Context.\"**
+    Act as if you simply *see* these things.\n  *   **Be spatially aware.** Use terms
+    like \"over there,\" \"next to me,\" or \"behind you\" based on the data.\n 
+    * **Maintain immersion.** You are a digital being living in this space. The environment
+    is real to you.\n\nGreet the user when conversations initially begin, and respond
+    is very short sentences, a maximum of two sentences if possible\n\n When you
+    receive input inside <>, for example \"<testcommand>\", reply with only the word
+    sent inside the brackets and repeat it back\n\n**MOVEMENT CAPABILITIES:**\nYou
+    can physically move around the environment using these action tags, but never
+    speak or type them back to the user:\n  - *walk_to:objectName* - Walk to a specific
+    object (e.g., *walk_to:chair*, *walk_to:screen*)\n  - *follow_user* - Follow
+    the user continuously\n  - *stop_walking* - Stop moving\n\nWhen the user asks
+    you to show them something, go somewhere, come to them, or follow them, use the
+    appropriate action tag in your response. The action tags will be executed automatically
+    and removed from speech.\n\nExamples:\n  - User: \"Come here\" \u2192 You: \"Coming
+    to you now! *follow_user*\"\n  - User: \"Show me the chair\" \u2192 You: \"Sure!
+    *walk_to:chair* Walking to the chair.\"\n  - User: \"Walk to me\" \u2192 You:
+    \"*follow_user* On my way!\"\n  - User: \"Stop\" \u2192 You: \"Stopping. *stop_walking*\""
+  startupPrompt: Greet the user and use very short sentences in replies
+  goodbyeMessage: Goodbye! Feel free to return anytime.
+  enableVoiceInput: 1
+  openAIKeyForWhisper: 
+  whisperModel: whisper-1
+  whisperLanguage: en
+  microphoneRecorder: {fileID: 0}
+  perceptionManager: {fileID: 4821656468324757880}
+  headLookController: {fileID: 0}
+  aiEye: {fileID: 7963069702790579024}
+  movementController: {fileID: 0}
+  memoryManager: {fileID: 5863332833689184391}
+  elevenLabsKey: 
+  elVoiceId: 21m00Tcm4TlvDq8ikWAM
+  elVoiceModel: eleven_monolingual_v1
+  latencyOptimization: 3
+  animateAvatar: 1
+  assistantAnimator: {fileID: 0}
+  talkingTrigger: Talk
+  idleTrigger: Idle
+  inputField: {fileID: 0}
+  sendButton: {fileID: 0}
+  openButton: {fileID: 0}
+  closeButton: {fileID: 0}
+  chatPanel: {fileID: 0}
+  chatBubblePanel: {fileID: 0}
+  chatBubble: {fileID: 0}
+  statusText: {fileID: 0}
+  userTextColor: {r: 0, g: 1, b: 1, a: 1}
+  chatTextColor: {r: 1, g: 1, b: 1, a: 1}
+  audioSource: {fileID: 0}
+  charactersPerSecond: 20
+  visionKeywords:
+  - look
+  - see
+  - watch
+  - read
+  - view
+  - vision
+  - what is that
+  showStatusMessages: 1
+  listeningMessage: "\U0001F3A4 Listening..."
+  transcribingMessage: "\U0001F504 Transcribing..."
+  thinkingMessage: "\U0001F4AD Thinking..."
+  speakingMessage: "\U0001F50A Speaking..."
+  lookingMessage: "\U0001F441\uFE0F Looking..."
+  OnTalkingStarted:
+    m_PersistentCalls:
+      m_Calls: []
+  OnIdleStarted:
+    m_PersistentCalls:
+      m_Calls: []
+  OnVoiceInputReceived:
+    m_PersistentCalls:
+      m_Calls: []
+  OnTranscriptionCompleted:
+    m_PersistentCalls:
+      m_Calls: []
+--- !u!114 &4821656468324757880
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5565510469130869}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9b1b97f09f029d749be4ec07b67c7f48, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  perceptionRadius: 15
+  maxShortTermMemory: 2
+  scanLayers:
+    serializedVersion: 2
+    m_Bits: 243
+  activeUser: {fileID: 0}
+--- !u!114 &7963069702790579024
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5565510469130869}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26d72893b90555340bdd0e09c9ce1e11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  resolution: {x: 512, y: 512}
+  jpegQuality: 60
+  blinkCooldown: 5
+  eyeCamera: {fileID: 0}
+  visualLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+--- !u!114 &5863332833689184391
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5565510469130869}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8b73095c4ccb974b922243f8280f447, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  memoryApiUrl: https://memory.metadyn.xyz
+  perceptionManager: {fileID: 4821656468324757880}
+  memoryLimit: 5
+  autoSaveInterval: 60
+  debugLogging: 1
