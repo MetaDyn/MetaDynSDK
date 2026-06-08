@@ -34,7 +34,7 @@ namespace MetaDyn.Editor
         [MenuItem("MetaDyn/Welcome Panel", false, 0)]
         [MenuItem("Tools/MetaDyn/Welcome Panel", false, 0)]
         public static void ShowWindow()
-{
+        {
             MetaDynWelcomePanel window = GetWindow<MetaDynWelcomePanel>(true, "MetaDyn Welcome", true);
             window.minSize = new Vector2(450, 550);
             window.maxSize = new Vector2(450, 700);
@@ -48,7 +48,7 @@ namespace MetaDyn.Editor
 
         private void OnGUI()
         {
-            MetaDynEditorHeader.DrawHeader("Welcome to MetaDyn", 
+            MetaDynEditorHeader.DrawHeader("Welcome to MetaDyn",
                 "The unified immersive platform for Unity 6. Let's get your project production-ready.");
 
             _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
@@ -77,7 +77,7 @@ namespace MetaDyn.Editor
         {
             MetaDynStyle.DrawSectionHeader("🚀 Getting Started");
             MetaDynStyle.BeginSection();
-            
+
             EditorGUILayout.LabelField("Follow these steps to configure your SDK:", EditorStyles.wordWrappedLabel);
             GUILayout.Space(5);
 
@@ -86,17 +86,71 @@ namespace MetaDyn.Editor
                 MetaDynProjectConfig.ShowWindow();
             }
 
-            if (DrawStep("2. Setup Authentication", "Configure your Supabase credentials to enable player accounts and persistence."))
+            // --- PROVISIONING STEP ---
+            string token = MetaDynProvisioningService.AuthToken;
+            bool isProvisioned = MetaDynProvisioningService.IsProvisioned;
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.LabelField("2. Provision SDK", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("Link your project to the MetaDyn platform using your Developer Token.", EditorStyles.wordWrappedMiniLabel);
+
+            GUILayout.Space(5);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUI.BeginChangeCheck();
+            token = EditorGUILayout.PasswordField(token);
+            if (EditorGUI.EndChangeCheck())
             {
-                MetaDynProjectConfig.ShowWindow();
+                MetaDynProvisioningService.AuthToken = token;
             }
 
-            if (DrawStep("3. Configure World Settings", "Set your Space ID and Room Name in a MetaDyn Runtime Config asset."))
+            if (GUILayout.Button("Paste", GUILayout.Width(50)))
+            {
+                token = (GUIUtility.systemCopyBuffer ?? string.Empty).Trim();
+                MetaDynProvisioningService.AuthToken = token;
+                GUI.FocusControl(null);
+            }
+            EditorGUILayout.EndHorizontal();
+
+            if (isProvisioned)
+            {
+                GUI.color = new Color(0.2f, 0.8f, 0.2f);
+                EditorGUILayout.LabelField("SDK Provisioned", EditorStyles.boldLabel);
+                GUI.color = Color.white;
+            }
+            else
+            {
+                using (new EditorGUI.DisabledScope(string.IsNullOrEmpty(token)))
+                {
+                    if (GUILayout.Button("Provision SDK", GUILayout.Height(25)))
+                    {
+                        PerformQuickProvision(token);
+                    }
+                }
+            }
+            EditorGUILayout.EndVertical();
+            GUILayout.Space(5);
+
+            if (DrawStep("3. Configure World Settings", "Select your space and set the room name for players to join."))
             {
                 MetaDynProjectConfig.ShowWindow();
             }
 
             MetaDynStyle.EndSection();
+        }
+
+        private async void PerformQuickProvision(string token)
+        {
+            Debug.Log("[MetaDyn] Provisioning SDK...");
+            bool success = await MetaDynProvisioningService.ProvisionSDK(token);
+            if (success)
+            {
+                EditorUtility.DisplayDialog("Provisioning Successful", "SDK has been successfully linked to your project.", "OK");
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("Provisioning Failed", "Failed to link SDK. Check the console for details.", "OK");
+            }
+            Repaint();
         }
 
         private void DrawToolkitSection()
@@ -168,7 +222,7 @@ namespace MetaDyn.Editor
         {
             GUILayout.FlexibleSpace();
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
-            
+
             EditorGUI.BeginChangeCheck();
             _showOnStartup = EditorGUILayout.ToggleLeft("Show this panel on startup", _showOnStartup);
             if (EditorGUI.EndChangeCheck())
@@ -178,7 +232,7 @@ namespace MetaDyn.Editor
 
             GUILayout.FlexibleSpace();
             GUILayout.Label($"SDK v{MetaDynSDK.SDK_VERSION}", EditorStyles.miniLabel);
-            
+
             EditorGUILayout.EndHorizontal();
         }
 

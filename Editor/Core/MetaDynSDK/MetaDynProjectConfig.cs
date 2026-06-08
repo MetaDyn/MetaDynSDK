@@ -1,6 +1,5 @@
 using UnityEditor;
 using UnityEngine;
-using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +8,7 @@ using MetaDyn.Dashboard;
 
 namespace MetaDyn
 {
-/// <summary>
+    /// <summary>
     /// MetaDyn Project Configuration - Professional deployment interface
     /// </summary>
     public class MetaDynProjectConfig : EditorWindow
@@ -42,11 +41,10 @@ namespace MetaDyn
         private List<ValidationResult> validationResults = new List<ValidationResult>();
 
         // Supabase Config
-private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
+        private SupabaseConfig supabaseConfig;
         private string lastSyncedName = "";
 
         // Developer Auth
-        private const string AUTH_TOKEN_KEY = "MetaDyn_AuthToken";
         private string authToken = "";
 
         public static void ShowWindow()
@@ -61,18 +59,13 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             // Load saved settings
             roomName = EditorPrefs.GetString(ROOM_NAME_KEY, "");
             buildPath = EditorPrefs.GetString(BUILD_PATH_KEY, MetaDynDeploymentManager.GetWebGLBuildPath());
-            authToken = EditorPrefs.GetString(AUTH_TOKEN_KEY, "");
+            authToken = MetaDynProvisioningService.AuthToken;
 
             LoadServerProfiles();
             LoadRuntimeConfigs();
 
             // Load Supabase Config
-            string[] guids = AssetDatabase.FindAssets("t:SupabaseConfig");
-            if (guids.Length > 0)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guids[0]);
-                supabaseConfig = AssetDatabase.LoadAssetAtPath<MetaDyn.Dashboard.SupabaseConfig>(path);
-            }
+            supabaseConfig = MetaDynProvisioningService.GetSupabaseConfig();
 
             // Load selected runtime config
             string runtimeConfigGuid = EditorPrefs.GetString(SELECTED_RUNTIME_CONFIG_KEY, "");
@@ -120,7 +113,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
         }
 
         private async void FetchSpaceName(string spaceId)
-{
+        {
             if (supabaseConfig == null || string.IsNullOrEmpty(spaceId)) return;
 
             string url = $"{supabaseConfig.SupabaseUrl}/rest/v1/spaces?id=eq.{spaceId}&select=name";
@@ -411,7 +404,6 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             }
         }
 
-        private const string PROVISION_URL = "https://dashboard.metadyn.xyz/api/sdk/provision";
         private bool isProvisioning = false;
 
         private void DrawAuthenticationSection()
@@ -422,20 +414,20 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             authToken = EditorGUILayout.PasswordField(authToken);
             if (EditorGUI.EndChangeCheck())
             {
-                EditorPrefs.SetString(AUTH_TOKEN_KEY, authToken.Trim());
+                MetaDynProvisioningService.AuthToken = authToken;
             }
 
             if (GUILayout.Button("Paste", GUILayout.Width(50)))
             {
-                authToken = GUIUtility.systemCopyBuffer.Trim();
-                EditorPrefs.SetString(AUTH_TOKEN_KEY, authToken);
+                authToken = (GUIUtility.systemCopyBuffer ?? string.Empty).Trim();
+                MetaDynProvisioningService.AuthToken = authToken;
                 GUI.FocusControl(null); // Clear focus to update field
             }
 
             if (GUILayout.Button("Clear", GUILayout.Width(50)))
             {
                 authToken = "";
-                EditorPrefs.SetString(AUTH_TOKEN_KEY, "");
+                MetaDynProvisioningService.AuthToken = "";
                 GUI.FocusControl(null);
             }
             EditorGUILayout.EndHorizontal();
@@ -446,10 +438,10 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             }
             else
             {
-                bool hasCredentials = supabaseConfig != null && !string.IsNullOrEmpty(supabaseConfig.SupabaseUrl);
+                bool isProvisioned = MetaDynProvisioningService.IsProvisioned;
 
                 EditorGUILayout.BeginHorizontal();
-                if (hasCredentials)
+                if (isProvisioned)
                 {
                     EditorGUILayout.HelpBox("SDK provisioned and token loaded.", MessageType.Info);
                     if (GUILayout.Button("Verify Token", GUILayout.Width(100)))
@@ -464,7 +456,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
                     {
                         if (GUILayout.Button("Provision SDK", GUILayout.Width(120)))
                         {
-                            ProvisionSDK();
+                            PerformProvision();
                         }
                     }
                 }
@@ -472,93 +464,26 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             }
         }
 
-        private async void ProvisionSDK()
+        private async void PerformProvision()
         {
             if (string.IsNullOrEmpty(authToken)) return;
 
             isProvisioning = true;
             Debug.Log("[MetaDyn] Provisioning SDK via Central Registry...");
 
-            try
+            bool success = await MetaDynProvisioningService.ProvisionSDK(authToken);
+            if (success)
             {
-                using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequest.PostWwwForm(PROVISION_URL, ""))
-                {
-                    request.SetRequestHeader("Authorization", $"Bearer {authToken}");
-                    request.SetRequestHeader("X-Client-Version", MetaDynSDK.SDK_VERSION);
-
-                    var operation = request.SendWebRequest();
-                    while (!operation.isDone) await System.Threading.Tasks.Task.Yield();
-
-                    if (request.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
-                    {
-                        var data = JsonUtility.FromJson<ProvisionResponse>(request.downloadHandler.text);
-                        if (data != null && !string.IsNullOrEmpty(data.supabase_url))
-                        {
-                            UpdateSupabaseConfig(data.supabase_url, data.anon_key);
-                            EditorUtility.DisplayDialog("Provisioning Successful", $"SDK has been successfully linked to project: {data.project_name}", "OK");
-                        }
-                        else
-                        {
-                            throw new Exception("Invalid response format from Registry.");
-                        }
-                    }
-                    else
-                    {
-                        throw new Exception(request.downloadHandler.text);
-                    }
-                }
+                supabaseConfig = MetaDynProvisioningService.GetSupabaseConfig();
+                EditorUtility.DisplayDialog("Provisioning Successful", "SDK has been successfully linked to your project.", "OK");
             }
-            catch (Exception e)
+            else
             {
-                Debug.LogError($"[MetaDyn] Provisioning failed: {e.Message}");
-                EditorUtility.DisplayDialog("Provisioning Failed", $"Failed to link SDK: {e.Message}", "OK");
-            }
-            finally
-            {
-                isProvisioning = false;
-                Repaint();
-            }
-        }
-
-        private void UpdateSupabaseConfig(string url, string key)
-        {
-            if (supabaseConfig == null)
-            {
-                // Find or create asset
-                string[] guids = AssetDatabase.FindAssets("t:SupabaseConfig");
-                if (guids.Length > 0)
-                {
-                    supabaseConfig = AssetDatabase.LoadAssetAtPath<SupabaseConfig>(AssetDatabase.GUIDToAssetPath(guids[0]));
-                }
-                else
-                {
-                    supabaseConfig = ScriptableObject.CreateInstance<SupabaseConfig>();
-                    const string configDirectory = "Assets/MetaDyn/Runtime/Core";
-                    if (!Directory.Exists(configDirectory))
-                    {
-                        Directory.CreateDirectory(configDirectory);
-                        AssetDatabase.Refresh();
-                    }
-
-                    AssetDatabase.CreateAsset(supabaseConfig, $"{configDirectory}/SupabaseConfig.asset");
-                }
+                EditorUtility.DisplayDialog("Provisioning Failed", "Failed to link SDK. Check the console for details.", "OK");
             }
 
-            Undo.RecordObject(supabaseConfig, "Provision SDK");
-            supabaseConfig.SupabaseUrl = url;
-            supabaseConfig.AnonKey = key;
-            EditorUtility.SetDirty(supabaseConfig);
-            AssetDatabase.SaveAssets();
-
-            Debug.Log($"[MetaDyn] Updated Supabase Config: {url}");
-        }
-
-        [Serializable]
-        private class ProvisionResponse
-        {
-            public string supabase_url;
-            public string anon_key;
-            public string project_name;
+            isProvisioning = false;
+            Repaint();
         }
 
         private async void VerifyToken()
@@ -582,16 +507,16 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
                         int start = json.IndexOf("\"email\":\"") + 9;
                         int end = json.IndexOf("\"", start);
                         string email = json.Substring(start, end - start);
-                        EditorUtility.DisplayDialog("Token Valid", $"✓ Authenticated as: {email}", "OK");
+                        EditorUtility.DisplayDialog("Token Valid", $"Authenticated as: {email}", "OK");
                     }
                     else
                     {
-                        EditorUtility.DisplayDialog("Token Valid", "✓ Token is valid, but email could not be parsed.", "OK");
+                        EditorUtility.DisplayDialog("Token Valid", "Token is valid, but email could not be parsed.", "OK");
                     }
                 }
                 else
                 {
-                    EditorUtility.DisplayDialog("Token Invalid", $"❌ Verification failed: {request.error}\n\n{request.downloadHandler.text}", "OK");
+                    EditorUtility.DisplayDialog("Token Invalid", $"Verification failed: {request.error}\n\n{request.downloadHandler.text}", "OK");
                 }
             }
         }
@@ -599,7 +524,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
         private void DrawBuildConfiguration()
         {
             // Runtime Config Selection
-EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 "Select a Runtime Config that defines the world settings for this build. All players using this build will automatically join the configured world.",
                 MessageType.Info
