@@ -130,37 +130,27 @@ namespace MetaDyn.Editor
 
         private void DrawResourcesSection()
         {
-            MetaDynStyle.DrawSectionHeader("📚 Resources & Documentation");
+            MetaDynStyle.DrawSectionHeader("Resources & Documentation");
             MetaDynStyle.BeginSection();
 
-            if (GUILayout.Button("View Local Documentation", EditorStyles.linkLabel))
+            if (GUILayout.Button("SDK README", EditorStyles.linkLabel))
             {
-                EditorUtility.RevealInFinder("Assets/Docs");
+                OpenLocalDoc("Packages/com.metadyn.sdk/README.md");
             }
 
-            if (GUILayout.Button("MetaDyn Executive Summary", EditorStyles.linkLabel))
+            if (GUILayout.Button("MetaDyn SDK Repository", EditorStyles.linkLabel))
             {
-                OpenLocalDoc("Assets/Docs/MetaDyn_Executive_Summary.md");
+                Application.OpenURL("https://github.com/MetaDyn/MetaDynSDK");
             }
 
-            if (GUILayout.Button("Auth System Reference", EditorStyles.linkLabel))
+            if (GUILayout.Button("Latest SDK Release", EditorStyles.linkLabel))
             {
-                OpenLocalDoc(".claude/Quick Reference/AUTH_SYSTEM.md");
+                Application.OpenURL("https://github.com/MetaDyn/MetaDynSDK/releases/tag/v" + MetaDynSDK.SDK_VERSION);
             }
 
-            if (GUILayout.Button("Infrastructure & Deployment Guide", EditorStyles.linkLabel))
+            if (GUILayout.Button("MetaDyn Website", EditorStyles.linkLabel))
             {
-                OpenLocalDoc(".claude/Quick Reference/INFRASTRUCTURE.md");
-            }
-
-            if (GUILayout.Button("AI Embodiment Guide", EditorStyles.linkLabel))
-            {
-                OpenLocalDoc(".claude/Quick Reference/AI_EMBODIMENT.md");
-            }
-
-            if (GUILayout.Button("Functional Design Spec (FDS)", EditorStyles.linkLabel))
-            {
-                OpenLocalDoc(".claude/Planning/FDS.md");
+                Application.OpenURL("https://metadyn.xyz");
             }
 
             MetaDynStyle.EndSection();

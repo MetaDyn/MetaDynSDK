@@ -40,34 +40,32 @@ namespace MetaDyn
         };
 
         private static readonly string[] ExplicitSdkFiles =
-{
+        {
             "Assets/StreamingAssets/microphone-processor.js",
-            "Assets/Common/UIGameMenu.cs",
-            "Assets/Common/UIGameMenu.prefab",
-            "Assets/Starter/Scripts/PlayerInput.cs"
+            "Assets/MetaDyn/Runtime/Core/Starter/UIGameMenu.cs",
+            "Assets/MetaDyn/Runtime/Core/Starter/PlayerInput.cs"
         };
 
         private static readonly HashSet<string> RelocatableBaselineScriptFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "PlayerInput.cs"
+            "PlayerInput.cs",
+            "UIGameMenu.cs"
         };
 
         private static readonly HashSet<string> CrossProjectSharedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Assets/MetaDyn/Dashboard/LoginUI.cs",
-            "Assets/Common/UIGameMenu.cs",
-            "Assets/MetaDyn/Dashboard/WebAuthBridge.cs",
-            "Assets/MetaDyn/Dashboard/SupabaseAuthManager.cs",
-            "Assets/MetaDyn/AI/MetaDynVoiceController.cs",
-            "Assets/Starter/Scripts/MetaDynVoiceController.cs"
+            "Assets/MetaDyn/Runtime/Dashboard/LoginUI.cs",
+            "Assets/MetaDyn/Runtime/Core/Starter/UIGameMenu.cs",
+            "Assets/MetaDyn/Runtime/Dashboard/WebAuthBridge.cs",
+            "Assets/MetaDyn/Runtime/Dashboard/SupabaseAuthManager.cs",
+            "Assets/MetaDyn/Runtime/AI/MetaDynVoiceController.cs"
         };
 
         private static readonly HashSet<string> ManualMergePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Assets/MetaDyn/AI/MetaDynVoiceController.cs",
-            "Assets/Starter/Scripts/MetaDynVoiceController.cs",
-            "Assets/MetaDyn/Dashboard/LoginUI.cs",
-            "Assets/Common/UIGameMenu.cs"
+            "Assets/MetaDyn/Runtime/AI/MetaDynVoiceController.cs",
+            "Assets/MetaDyn/Runtime/Dashboard/LoginUI.cs",
+            "Assets/MetaDyn/Runtime/Core/Starter/UIGameMenu.cs"
         };
 
         private enum ComparisonSourceMode

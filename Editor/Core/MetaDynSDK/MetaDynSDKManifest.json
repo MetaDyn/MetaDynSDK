@@ -21,16 +21,14 @@
   },
   "releaseNotesUrl": "https://github.com/MetaDyn/MetaDynSDK/releases/tag/v1.2.0",
   "downloadUrl": "https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.2.0.zip",
-"packageRoot": "Assets",
+  "packageRoot": "Assets",
   "trackedRoots": [
     "Assets/MetaDyn",
-    "Assets/Common",
-    "Assets/Plugins/WebGL",
-    "Assets/Starter/Scripts/PlayerInput.cs"
+    "Assets/StreamingAssets/microphone-processor.js"
   ],
   "optionalComponents": [],
   "notices": [
-{
+    {
       "type": "info",
       "message": "MetaDyn Master SDK is now powered by Unity Gaming Services."
     }
