@@ -638,7 +638,7 @@ namespace MetaDyn
 
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.Label("Max Players:", GUILayout.Width(100));
-                int newMaxPlayers = EditorGUILayout.IntSlider(selectedRuntimeConfig.maxPlayers, 1, 50);
+                int newMaxPlayers = EditorGUILayout.IntSlider(selectedRuntimeConfig.maxPlayers, 1, 100);
                 EditorGUILayout.EndHorizontal();
 
                 // Save changes back to ScriptableObject
