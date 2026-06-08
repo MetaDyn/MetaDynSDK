@@ -1,7 +1,7 @@
 {
   "sdkName": "MetaDyn SDK",
   "channel": "stable",
-  "latestVersion": "1.2.0",
+  "latestVersion": "1.3.0",
   "minimumSupportedVersion": "1.1.0",
   "unity": {
     "minimumVersion": "6000.0.62f1",
@@ -19,8 +19,8 @@
     "supportedVersion": "2.0.9 Stable",
     "minimumVersion": "2.0.9"
   },
-  "releaseNotesUrl": "https://github.com/MetaDyn/MetaDynSDK/releases/tag/v1.2.0",
-  "downloadUrl": "https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.2.0.zip",
+  "releaseNotesUrl": "https://github.com/MetaDyn/MetaDynSDK/releases/tag/v1.3.0",
+  "downloadUrl": "https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.3.0.zip",
   "packageRoot": "Assets",
   "trackedRoots": [
     "Assets/MetaDyn",

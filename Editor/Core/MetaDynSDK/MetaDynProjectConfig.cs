@@ -1,9 +1,11 @@
 using UnityEditor;
 using UnityEngine;
+using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using MetaDyn.Editor;
+using MetaDyn.Dashboard;
 
 namespace MetaDyn
 {
@@ -25,24 +27,24 @@ namespace MetaDyn
         // Runtime config - the source of truth for world settings
         private MetaDynRuntimeConfig selectedRuntimeConfig;
         private List<MetaDynRuntimeConfig> runtimeConfigs = new List<MetaDynRuntimeConfig>();
-        
+
         private Vector2 scrollPosition;
         private GUIStyle headerStyle;
         private GUIStyle subHeaderStyle;
         private GUIStyle successStyle;
         private GUIStyle errorStyle;
         private bool stylesInitialized = false;
-        
+
         private bool isDeploying = false;
         private MetaDynRegistryProgressWindow deployProgressWindow;
-        
+
         // Validation
         private List<ValidationResult> validationResults = new List<ValidationResult>();
 
         // Supabase Config
 private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
         private string lastSyncedName = "";
-        
+
         // Developer Auth
         private const string AUTH_TOKEN_KEY = "MetaDyn_AuthToken";
         private string authToken = "";
@@ -53,7 +55,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             window.minSize = new Vector2(500, 600);
             window.Show();
         }
-        
+
         private void OnEnable()
         {
             // Load saved settings
@@ -92,7 +94,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             {
                 // Assume in sync initially
                 lastSyncedName = selectedRuntimeConfig.worldDisplayName;
-                
+
                 // Pull fresh from DB if we have an ID
                 if (!string.IsNullOrEmpty(selectedRuntimeConfig.spaceId))
                 {
@@ -122,15 +124,15 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             if (supabaseConfig == null || string.IsNullOrEmpty(spaceId)) return;
 
             string url = $"{supabaseConfig.SupabaseUrl}/rest/v1/spaces?id=eq.{spaceId}&select=name";
-            
+
             using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequest.Get(url))
             {
                 request.SetRequestHeader("apikey", supabaseConfig.AnonKey);
-                
+
                 // Use Token if available, otherwise Anon
                 string authHeader = !string.IsNullOrEmpty(authToken) ? $"Bearer {authToken}" : $"Bearer {supabaseConfig.AnonKey}";
                 request.SetRequestHeader("Authorization", authHeader);
-                
+
                 var operation = request.SendWebRequest();
                 while (!operation.isDone) await System.Threading.Tasks.Task.Yield();
 
@@ -143,7 +145,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
                         int start = json.IndexOf("\"name\":\"") + 8;
                         int end = json.IndexOf("\"", start);
                         string remoteName = json.Substring(start, end - start);
-                        
+
                         if (selectedRuntimeConfig != null)
                         {
                             selectedRuntimeConfig.worldDisplayName = remoteName;
@@ -174,20 +176,25 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
                 request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.SetRequestHeader("apikey", supabaseConfig.AnonKey);
-                
-                // Use Token if available, otherwise Anon
-                string authHeader = !string.IsNullOrEmpty(authToken) ? $"Bearer {authToken}" : $"Bearer {supabaseConfig.AnonKey}";
-                request.SetRequestHeader("Authorization", authHeader);
+
+                // Administrative Writes strictly require the Developer Token
+                if (string.IsNullOrEmpty(authToken))
+                {
+                    Debug.LogError("[MetaDyn] Cannot sync to Dashboard: Developer Token is missing! Please enter your token in the Deployment Center.");
+                    return;
+                }
+
+                request.SetRequestHeader("Authorization", $"Bearer {authToken}");
 
                 request.SetRequestHeader("Prefer", "return=representation"); // Request the updated row back
-                
+
                 var operation = request.SendWebRequest();
                 while (!operation.isDone) await System.Threading.Tasks.Task.Yield();
 
                 if (request.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
                 {
                     string response = request.downloadHandler.text;
-                    
+
                     if (string.IsNullOrEmpty(response) || response == "[]")
                     {
                         Debug.LogError("[MetaDyn] Sync reported success but returned NO data.");
@@ -232,7 +239,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
                 }
             }
         }
-        
+
         private void LoadServerProfiles()
         {
             serverProfiles.Clear();
@@ -247,45 +254,45 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
                 }
             }
         }
-        
+
         private void InitializeStyles()
         {
             if (stylesInitialized) return;
-            
+
             headerStyle = new GUIStyle(EditorStyles.boldLabel)
             {
                 fontSize = 16,
                 normal = { textColor = new Color(0.2f, 0.6f, 1f) }
             };
-            
+
             subHeaderStyle = new GUIStyle(EditorStyles.boldLabel)
             {
                 fontSize = 12,
                 normal = { textColor = Color.white }
             };
-            
+
             successStyle = new GUIStyle(EditorStyles.label)
             {
                 normal = { textColor = new Color(0.2f, 0.8f, 0.2f) },
                 fontStyle = FontStyle.Bold
             };
-            
+
             errorStyle = new GUIStyle(EditorStyles.label)
             {
                 normal = { textColor = new Color(0.8f, 0.2f, 0.2f) },
                 fontStyle = FontStyle.Bold
             };
-            
+
             stylesInitialized = true;
         }
-        
+
         private void OnGUI()
         {
             InitializeStyles();
-            
-            MetaDynEditorHeader.DrawHeader("Deployment Center", 
+
+            MetaDynEditorHeader.DrawHeader("Deployment Center",
                 "Configure world settings, build paths, and deploy your space to the MetaDyn platform.");
-            
+
             scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
             // === VALIDATION ===
@@ -293,7 +300,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             MetaDynStyle.BeginSection();
             DrawValidationSection();
             MetaDynStyle.EndSection();
-            
+
             GUILayout.Space(10);
 
             // === AUTHENTICATION ===
@@ -301,37 +308,37 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             MetaDynStyle.BeginSection();
             DrawAuthenticationSection();
             MetaDynStyle.EndSection();
-            
+
             GUILayout.Space(10);
-            
+
             // === BUILD CONFIGURATION ===
             MetaDynStyle.DrawSectionHeader("📦 Build Configuration");
             MetaDynStyle.BeginSection();
             DrawBuildConfiguration();
             MetaDynStyle.EndSection();
-            
+
             GUILayout.Space(10);
-            
+
             // === SERVER CONFIGURATION ===
             MetaDynStyle.DrawSectionHeader("🌐 Server Configuration");
             MetaDynStyle.BeginSection();
             DrawServerConfiguration();
             MetaDynStyle.EndSection();
-            
+
             GUILayout.Space(10);
-            
+
             // === DEPLOYMENT SECTION ===
             MetaDynStyle.DrawSectionHeader("⚡ Deployment");
             MetaDynStyle.BeginSection();
             DrawDeploymentSection();
             MetaDynStyle.EndSection();
-            
+
             GUILayout.Space(10);
-            
+
             GUILayout.FlexibleSpace();
-            
+
             EditorGUILayout.EndScrollView();
-            
+
             // Footer (outside scroll view)
             EditorGUILayout.BeginHorizontal(EditorStyles.helpBox);
             GUILayout.Label($"SDK v{MetaDynSDK.SDK_VERSION}", EditorStyles.miniLabel);
@@ -358,7 +365,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             foreach (var result in validationResults)
             {
                 EditorGUILayout.BeginHorizontal();
-                
+
                 string icon = "";
                 GUIStyle style = EditorStyles.label;
                 switch (result.status)
@@ -404,6 +411,9 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             }
         }
 
+        private const string PROVISION_URL = "https://dashboard.metadyn.xyz/api/sdk/provision";
+        private bool isProvisioning = false;
+
         private void DrawAuthenticationSection()
         {
             EditorGUILayout.BeginHorizontal();
@@ -414,7 +424,7 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
             {
                 EditorPrefs.SetString(AUTH_TOKEN_KEY, authToken.Trim());
             }
-            
+
             if (GUILayout.Button("Paste", GUILayout.Width(50)))
             {
                 authToken = GUIUtility.systemCopyBuffer.Trim();
@@ -429,33 +439,138 @@ private MetaDyn.Dashboard.SupabaseConfig supabaseConfig;
                 GUI.FocusControl(null);
             }
             EditorGUILayout.EndHorizontal();
-            
+
             if (string.IsNullOrEmpty(authToken))
             {
-                EditorGUILayout.HelpBox("Paste your API Token from the Dashboard to enable writing to Supabase.", MessageType.Warning);
+                EditorGUILayout.HelpBox("Paste your Developer Token from the MetaDyn Dashboard to enable SDK features.", MessageType.Warning);
             }
             else
             {
+                bool hasCredentials = supabaseConfig != null && !string.IsNullOrEmpty(supabaseConfig.SupabaseUrl);
+
                 EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.HelpBox("✓ Token loaded.", MessageType.Info);
-                if (GUILayout.Button("Verify Token", GUILayout.Width(100)))
+                if (hasCredentials)
                 {
-                    VerifyToken();
+                    EditorGUILayout.HelpBox("SDK provisioned and token loaded.", MessageType.Info);
+                    if (GUILayout.Button("Verify Token", GUILayout.Width(100)))
+                    {
+                        VerifyToken();
+                    }
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("SDK not provisioned. Click Provision to link with your project.", MessageType.Warning);
+                    using (new EditorGUI.DisabledScope(isProvisioning))
+                    {
+                        if (GUILayout.Button("Provision SDK", GUILayout.Width(120)))
+                        {
+                            ProvisionSDK();
+                        }
+                    }
                 }
                 EditorGUILayout.EndHorizontal();
             }
         }
 
+        private async void ProvisionSDK()
+        {
+            if (string.IsNullOrEmpty(authToken)) return;
+
+            isProvisioning = true;
+            Debug.Log("[MetaDyn] Provisioning SDK via Central Registry...");
+
+            try
+            {
+                using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequest.PostWwwForm(PROVISION_URL, ""))
+                {
+                    request.SetRequestHeader("Authorization", $"Bearer {authToken}");
+                    request.SetRequestHeader("X-Client-Version", MetaDynSDK.SDK_VERSION);
+
+                    var operation = request.SendWebRequest();
+                    while (!operation.isDone) await System.Threading.Tasks.Task.Yield();
+
+                    if (request.result == UnityEngine.Networking.UnityWebRequest.Result.Success)
+                    {
+                        var data = JsonUtility.FromJson<ProvisionResponse>(request.downloadHandler.text);
+                        if (data != null && !string.IsNullOrEmpty(data.supabase_url))
+                        {
+                            UpdateSupabaseConfig(data.supabase_url, data.anon_key);
+                            EditorUtility.DisplayDialog("Provisioning Successful", $"SDK has been successfully linked to project: {data.project_name}", "OK");
+                        }
+                        else
+                        {
+                            throw new Exception("Invalid response format from Registry.");
+                        }
+                    }
+                    else
+                    {
+                        throw new Exception(request.downloadHandler.text);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[MetaDyn] Provisioning failed: {e.Message}");
+                EditorUtility.DisplayDialog("Provisioning Failed", $"Failed to link SDK: {e.Message}", "OK");
+            }
+            finally
+            {
+                isProvisioning = false;
+                Repaint();
+            }
+        }
+
+        private void UpdateSupabaseConfig(string url, string key)
+        {
+            if (supabaseConfig == null)
+            {
+                // Find or create asset
+                string[] guids = AssetDatabase.FindAssets("t:SupabaseConfig");
+                if (guids.Length > 0)
+                {
+                    supabaseConfig = AssetDatabase.LoadAssetAtPath<SupabaseConfig>(AssetDatabase.GUIDToAssetPath(guids[0]));
+                }
+                else
+                {
+                    supabaseConfig = ScriptableObject.CreateInstance<SupabaseConfig>();
+                    const string configDirectory = "Assets/MetaDyn/Runtime/Core";
+                    if (!Directory.Exists(configDirectory))
+                    {
+                        Directory.CreateDirectory(configDirectory);
+                        AssetDatabase.Refresh();
+                    }
+
+                    AssetDatabase.CreateAsset(supabaseConfig, $"{configDirectory}/SupabaseConfig.asset");
+                }
+            }
+
+            Undo.RecordObject(supabaseConfig, "Provision SDK");
+            supabaseConfig.SupabaseUrl = url;
+            supabaseConfig.AnonKey = key;
+            EditorUtility.SetDirty(supabaseConfig);
+            AssetDatabase.SaveAssets();
+
+            Debug.Log($"[MetaDyn] Updated Supabase Config: {url}");
+        }
+
+        [Serializable]
+        private class ProvisionResponse
+        {
+            public string supabase_url;
+            public string anon_key;
+            public string project_name;
+        }
+
         private async void VerifyToken()
         {
             if (supabaseConfig == null) return;
-            
+
             string url = $"{supabaseConfig.SupabaseUrl}/auth/v1/user";
             using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequest.Get(url))
             {
                 request.SetRequestHeader("apikey", supabaseConfig.AnonKey);
                 request.SetRequestHeader("Authorization", $"Bearer {authToken}");
-                
+
                 var operation = request.SendWebRequest();
                 while (!operation.isDone) await System.Threading.Tasks.Task.Yield();
 
@@ -539,7 +654,7 @@ EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
             if (selectedRuntimeConfig != null)
             {
                 GUILayout.Space(5);
-                
+
                 // VALIDATION: Is this the active config?
                 string currentPath = AssetDatabase.GetAssetPath(selectedRuntimeConfig);
                 bool isCorrectName = selectedRuntimeConfig.name == "MetaDynRuntimeConfig";
@@ -553,7 +668,7 @@ EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
                     EditorGUILayout.LabelField("⚠ INACTIVE CONFIGURATION", EditorStyles.boldLabel);
                     GUI.color = Color.white;
                     EditorGUILayout.HelpBox("The Runtime (and builds) only load the config named 'MetaDynRuntimeConfig' located in a 'Resources' folder. This asset is currently disconnected.", MessageType.Warning);
-                    
+
                     if (GUILayout.Button("Make Active (Rename & Move to Resources)"))
                     {
                         MakeConfigActive(selectedRuntimeConfig);
@@ -585,7 +700,7 @@ EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.Label("Display Name:", GUILayout.Width(100));
                 string newDisplayName = EditorGUILayout.TextField(selectedRuntimeConfig.worldDisplayName);
-                
+
                 // Sync Button logic - only enabled if local name != last synced name
                 bool isDirty = selectedRuntimeConfig.worldDisplayName != lastSyncedName;
                 GUI.enabled = isDirty && !string.IsNullOrEmpty(selectedRuntimeConfig.spaceId) && supabaseConfig != null;
@@ -722,8 +837,8 @@ EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
             // If another one exists at the destination, we should probably delete it or rename it
             if (AssetDatabase.LoadAssetAtPath<MetaDynRuntimeConfig>(newPath) != null && currentPath != newPath)
             {
-                if (!EditorUtility.DisplayDialog("Replace Active Config", 
-                    "An active config already exists at Assets/Resources/MetaDynRuntimeConfig.asset. Do you want to replace it with this one?", 
+                if (!EditorUtility.DisplayDialog("Replace Active Config",
+                    "An active config already exists at Assets/Resources/MetaDynRuntimeConfig.asset. Do you want to replace it with this one?",
                     "Replace", "Cancel"))
                 {
                     return;
@@ -736,12 +851,12 @@ EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
             {
                 AssetDatabase.SaveAssets();
                 AssetDatabase.Refresh();
-                
+
                 // Update selection
                 selectedRuntimeConfig = AssetDatabase.LoadAssetAtPath<MetaDynRuntimeConfig>(newPath);
                 string guid = AssetDatabase.AssetPathToGUID(newPath);
                 EditorPrefs.SetString(SELECTED_RUNTIME_CONFIG_KEY, guid);
-                
+
                 LoadRuntimeConfigs();
                 Repaint();
                 Debug.Log($"[MetaDyn] {config.name} is now the active Runtime Config.");
@@ -785,13 +900,13 @@ EditorGUILayout.LabelField("World Configuration", EditorStyles.boldLabel);
                 EditorGUIUtility.PingObject(newConfig);
             }
         }
-        
+
         private void DrawServerConfiguration()
         {
             // Server Profile Selection
             EditorGUILayout.BeginHorizontal();
 GUILayout.Label("Server Profile:", GUILayout.Width(100));
-            
+
             if (serverProfiles.Count == 0)
             {
                 GUILayout.Label("No profiles found", EditorStyles.miniLabel);
@@ -805,29 +920,29 @@ GUILayout.Label("Server Profile:", GUILayout.Width(100));
                 EditorGUI.BeginChangeCheck();
                 int selectedIndex = selectedProfile != null ? serverProfiles.IndexOf(selectedProfile) : -1;
                 if (selectedIndex < 0) selectedIndex = 0;
-                
+
                 selectedIndex = EditorGUILayout.Popup(selectedIndex, serverProfiles.Select(p => p.GetDisplayName()).ToArray());
-                
+
                 if (EditorGUI.EndChangeCheck() && selectedIndex >= 0 && selectedIndex < serverProfiles.Count)
                 {
                     selectedProfile = serverProfiles[selectedIndex];
                     string guid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(selectedProfile));
                     EditorPrefs.SetString(SELECTED_PROFILE_KEY, guid);
                 }
-                
+
                 if (GUILayout.Button("Create New", GUILayout.Width(80)))
                 {
                     CreateNewServerProfile();
                 }
-                
+
                 if (GUILayout.Button("⟳", GUILayout.Width(30)))
                 {
                     LoadServerProfiles();
                 }
             }
-            
+
             EditorGUILayout.EndHorizontal();
-            
+
             // Display selected profile info
             if (selectedProfile != null)
             {
@@ -874,7 +989,7 @@ GUILayout.Label("Server Profile:", GUILayout.Width(100));
             string user = EditorGUILayout.TextField("Username:", selectedProfile.username);
             string path = EditorGUILayout.TextField("Remote Path:", selectedProfile.remotePath);
             string url = EditorGUILayout.TextField("Deploy URL:", selectedProfile.deployedURL);
-            
+
             if (EditorGUI.EndChangeCheck())
             {
                 Undo.RecordObject(selectedProfile, "Edit SCP Profile");
@@ -945,10 +1060,10 @@ GUILayout.Label("Server Profile:", GUILayout.Width(100));
             }
             else
             {
-                string rName = string.IsNullOrEmpty(selectedProfile.githubRepo) ? 
-                    System.Text.RegularExpressions.Regex.Replace(selectedRuntimeConfig != null ? selectedRuntimeConfig.roomName : "space", "[^a-zA-Z0-9-]", "-").ToLower() : 
+                string rName = string.IsNullOrEmpty(selectedProfile.githubRepo) ?
+                    System.Text.RegularExpressions.Regex.Replace(selectedRuntimeConfig != null ? selectedRuntimeConfig.roomName : "space", "[^a-zA-Z0-9-]", "-").ToLower() :
                     selectedProfile.githubRepo;
-                
+
                 EditorGUILayout.LabelField("Final URL:", $"https://{selectedProfile.githubUsername}.github.io/{rName}/", EditorStyles.miniLabel);
             }
         }
@@ -962,9 +1077,9 @@ selectedRuntimeConfig.IsValid() &&
                            selectedProfile != null &&
                            selectedProfile.IsValid() &&
                            !isDeploying;
-            
+
             GUI.enabled = canDeploy;
-            
+
             // Big Deploy Button
             GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
             {
@@ -972,7 +1087,7 @@ selectedRuntimeConfig.IsValid() &&
                 fontStyle = FontStyle.Bold,
                 fixedHeight = 40
             };
-            
+
             string btnLabel = "🚀 DEPLOY";
             if (selectedProfile != null)
             {
@@ -985,9 +1100,9 @@ selectedRuntimeConfig.IsValid() &&
             {
                 StartDeployment();
             }
-            
+
             GUI.enabled = true;
-            
+
             // Show why deploy is disabled
             if (!canDeploy && !isDeploying)
             {
@@ -1009,7 +1124,7 @@ selectedRuntimeConfig.IsValid() &&
                 "asset",
                 "Create a new MetaDyn server profile"
             );
-            
+
             if (!string.IsNullOrEmpty(path))
             {
                 MetaDynServerProfile newProfile = CreateInstance<MetaDynServerProfile>();
@@ -1017,55 +1132,55 @@ selectedRuntimeConfig.IsValid() &&
                 AssetDatabase.SaveAssets();
                 LoadServerProfiles();
                 selectedProfile = newProfile;
-                
+
                 // Select the new asset in the project
                 Selection.activeObject = newProfile;
                 EditorGUIUtility.PingObject(newProfile);
             }
         }
-        
+
         private void TestServerConnection()
         {
             if (selectedProfile == null) return;
-            
+
             bool cancelled = false;
             bool completed = false;
             bool success = false;
             string message = "";
-            
+
             // Show cancellable progress bar
             System.Threading.Thread testThread = new System.Threading.Thread(() =>
             {
                 success = MetaDynDeploymentManager.TestConnection(selectedProfile, out message);
                 completed = true;
             });
-            
+
             testThread.Start();
-            
+
             // Wait with progress bar using actual profile timeout
             float elapsed = 0f;
             int timeout = selectedProfile.connectionTimeout;
-            
+
             while (!completed && elapsed < timeout && !cancelled)
             {
                 cancelled = EditorUtility.DisplayCancelableProgressBar(
-                    "Testing Connection", 
+                    "Testing Connection",
                     $"Connecting to {selectedProfile.serverAddress}...\n(Timeout: {timeout}s, Elapsed: {Mathf.RoundToInt(elapsed)}s)",
                     elapsed / timeout
                 );
-                
+
                 System.Threading.Thread.Sleep(100);
                 elapsed += 0.1f;
             }
-            
+
             EditorUtility.ClearProgressBar();
-            
+
             if (cancelled)
             {
                 EditorUtility.DisplayDialog("Connection Test", "Connection test cancelled by user.", "OK");
                 return;
             }
-            
+
             if (!completed)
             {
                 EditorUtility.DisplayDialog(
@@ -1075,14 +1190,14 @@ selectedRuntimeConfig.IsValid() &&
                 );
                 return;
             }
-            
+
             EditorUtility.DisplayDialog(
                 success ? "✅ Connection Successful" : "❌ Connection Failed",
                 message,
                 "OK"
             );
         }
-        
+
         /// <summary>
         /// Update the selected runtime configuration before deployment
         /// </summary>
@@ -1098,8 +1213,8 @@ selectedRuntimeConfig.IsValid() &&
             string currentPath = AssetDatabase.GetAssetPath(selectedRuntimeConfig);
             if (selectedRuntimeConfig.name != "MetaDynRuntimeConfig" || !currentPath.Contains("/Resources/"))
             {
-                if (EditorUtility.DisplayDialog("Inactive Config", 
-                    $"The selected config '{selectedRuntimeConfig.name}' is not currently set as the active runtime config. You should make it active before deploying so the build uses this data.", 
+                if (EditorUtility.DisplayDialog("Inactive Config",
+                    $"The selected config '{selectedRuntimeConfig.name}' is not currently set as the active runtime config. You should make it active before deploying so the build uses this data.",
                     "Make Active & Continue", "Cancel Deployment"))
                 {
                     MakeConfigActive(selectedRuntimeConfig);
@@ -1118,8 +1233,8 @@ selectedRuntimeConfig.IsValid() &&
             {
                 if (selectedProfile.deploymentType == DeploymentType.GitHub)
                 {
-                    string repoName = string.IsNullOrEmpty(selectedProfile.githubRepo) ? 
-                        System.Text.RegularExpressions.Regex.Replace(selectedRuntimeConfig.roomName, "[^a-zA-Z0-9-]", "-").ToLower() : 
+                    string repoName = string.IsNullOrEmpty(selectedProfile.githubRepo) ?
+                        System.Text.RegularExpressions.Regex.Replace(selectedRuntimeConfig.roomName, "[^a-zA-Z0-9-]", "-").ToLower() :
                         selectedProfile.githubRepo;
                     selectedRuntimeConfig.deploymentURL = $"https://{selectedProfile.githubUsername}.github.io/{repoName}/";
                 }
@@ -1149,16 +1264,16 @@ selectedRuntimeConfig.IsValid() &&
                 Debug.Log($"  - Deployment URL: {selectedRuntimeConfig.deploymentURL}");
             }
         }
-        
+
         private void StartDeployment()
         {
             // Update runtime config before deployment
             UpdateRuntimeConfig();
-            
+
             isDeploying = true;
             string title = "Space Deployment";
             string status = $"Deploying to {selectedProfile.deploymentType}";
-            
+
             deployProgressWindow = MetaDynRegistryProgressWindow.ShowProgress(title, status);
             deployProgressWindow.UpdateStatus("Initializing...", 0.05f);
 
@@ -1185,22 +1300,22 @@ selectedRuntimeConfig.IsValid() &&
             {
                 // Create a dynamic profile clone for this specific deployment
                 MetaDynServerProfile dynamicProfile = Instantiate(selectedProfile);
-                
+
                 // Construct URL-safe subfolder: "RoomName-SpaceID"
                 string safeRoomName = System.Text.RegularExpressions.Regex.Replace(selectedRuntimeConfig.roomName, "[^a-zA-Z0-9]", "-");
                 string subFolder = $"{safeRoomName}-{selectedRuntimeConfig.spaceId}";
-                
+
                 // Append to remote path (ensure trailing slash)
                 string basePath = dynamicProfile.remotePath.TrimEnd('/');
                 dynamicProfile.remotePath = $"{basePath}/{subFolder}/";
-                
+
                 // Update deployed URL to match
                 string baseUrl = dynamicProfile.deployedURL.TrimEnd('/');
                 dynamicProfile.deployedURL = $"{baseUrl}/{subFolder}/";
-                
+
                 Debug.Log($"[MetaDyn] Dynamic Deployment Path: {dynamicProfile.remotePath}");
                 Debug.Log($"[MetaDyn] Dynamic URL: {dynamicProfile.deployedURL}");
-                
+
                 // Start deployment in background with the dynamic profile
                 System.Threading.ThreadPool.QueueUserWorkItem(_ =>
                 {
@@ -1224,15 +1339,15 @@ selectedRuntimeConfig.IsValid() &&
                     selectedProfile.netlifySiteId = siteId;
                     selectedProfile.deployedURL = url;
                     EditorUtility.SetDirty(selectedProfile);
-                    
+
                     // Update runtime config with final URL
                     UpdateRuntimeConfig();
                 }
-                
+
                 OnDeployComplete(success, message);
             };
         }
-        
+
         private void OnDeployProgress(float progress, string message)
         {
             UnityEditor.EditorApplication.delayCall += () =>
@@ -1244,14 +1359,14 @@ selectedRuntimeConfig.IsValid() &&
                 Repaint();
             };
         }
-        
+
         private void OnDeployComplete(bool success, string message)
         {
             // Use delayCall to ensure we're on the main thread
             UnityEditor.EditorApplication.delayCall += () =>
             {
                 isDeploying = false;
-                
+
                 if (deployProgressWindow != null)
                 {
                     if (success)
@@ -1265,7 +1380,7 @@ selectedRuntimeConfig.IsValid() &&
                         Debug.LogError($"[MetaDyn] ❌ {message}");
                     }
                 }
-                
+
                 Repaint();
             };
         }

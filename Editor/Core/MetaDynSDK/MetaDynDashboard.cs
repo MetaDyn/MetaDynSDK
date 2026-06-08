@@ -265,7 +265,7 @@ namespace MetaDyn
 
         private static string GetLatestVersion()
         {
-            return "1.2.0"; // Fallback
+            return "1.3.0"; // Fallback
         }
 
         private static bool IsUpdateAvailable(string installedVersion, string latestVersion)
