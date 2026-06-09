@@ -117,6 +117,26 @@ Every playable space should include at least one `EntrancePoint`. The session/sp
 
 `MetaDynUGSAvatarRegistry` defines available NGO-ready player prefabs and maps user avatar selection indices to network-spawnable prefabs.
 
+### Runtime GLB Avatars On WebGL
+
+Runtime-loaded GLB avatars use glTFast. WebGL builds must include glTFast shader-backed materials in Resources so Unity does not strip the shaders needed by materials created at runtime.
+
+Required Resources materials:
+
+```text
+Assets/Resources/GLTFastShaders/gltfast_metallic.mat
+Assets/Resources/GLTFastShaders/gltfast_specular.mat
+Assets/Resources/GLTFastShaders/gltfast_unlit.mat
+```
+
+Create or refresh them from Unity:
+
+```text
+Tools > MetaDyn > Create GLTFast Shader Materials (WebGL Fix)
+```
+
+The runtime avatar loader should convert imported GLB materials onto clones of these Resources materials, preserving imported textures, colors, keywords, and render state. Do not convert runtime GLB avatars to generic URP Lit fallback materials; that can flatten avatars to white and lose glTF material properties. If a WebGL avatar starts correct and later turns magenta/pink, check that the Resources materials exist and that the browser console does not report missing or unsupported glTFast shaders.
+
 ### Authentication Modes
 
 The SDK supports:
