@@ -811,9 +811,9 @@ MonoBehaviour:
   displayName: FlatScreen
   creatorName: 
   category: Items
-  rarity: 0
+  rarity: 4
   version: 1.0.1
-  license: 6
+  license: 0
   licenseUrl: 
   manifestJson: {fileID: 4900000, guid: 6e6324ba572f4bd4696431829f5ee0d2, type: 3}
   platformManifestUrl: 

@@ -85,6 +85,19 @@ namespace Starter
 			if (_isStartingGame)
 				return;
 
+			// Verify authentication if required before starting network session
+			if (WebAuthBridge.Instance != null && WebAuthBridge.Instance.RequireAuthentication)
+			{
+				if (SupabaseAuthManager.Instance == null || !SupabaseAuthManager.Instance.IsAuthenticated)
+				{
+					if (StatusText != null)
+						StatusText.text = "Authentication required to join.";
+					
+					Debug.LogWarning("[UIGameMenu] StartGame aborted: Authentication is required but user is not logged in.");
+					return;
+				}
+			}
+
 			_isStartingGame = true;
 
 			if (this == null)

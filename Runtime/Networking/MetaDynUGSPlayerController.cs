@@ -73,6 +73,7 @@ private const float LandCooldown = 0.35f;
 
         public string DisplayName => _networkedName.Value.ToString();
         public bool IsEmoting { get; private set; }
+        public Animator Animator => animator;
 
         public static event System.Action OnLocalPlayerReady;
 
@@ -456,8 +457,19 @@ private int _animIDGrounded;
             return _airborneTime >= minAirTimeForLanding && _lastVerticalVelocity <= minLandingVelocity;
         }
 
-        private void CacheModelRenderers()
+        public void RefreshModelRenderers()
         {
+            CacheModelRenderers();
+        }
+
+        public Transform ModelRoot
+        {
+            get => modelRoot;
+            set => modelRoot = value;
+        }
+
+        private void CacheModelRenderers()
+{
             if (modelRoot == null)
                 modelRoot = transform;
 
