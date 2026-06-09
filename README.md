@@ -3,7 +3,7 @@
 Official Unity Package Manager SDK for building MetaDyn spaces: browser-first immersive worlds with Unity Gaming Services, Netcode for GameObjects, Vivox communication, Supabase identity hooks, creator tooling, inventory bundling, and embodied AI systems.
 
 Package name: `com.metadyn.sdk`
-Current release: `v1.3.1`
+Current release: `v1.3.2`
 Unity version: `6000.0` or newer
 Primary target: WebGL
 
@@ -35,7 +35,7 @@ In Unity:
 4. Enter:
 
 ```text
-https://github.com/MetaDyn/MetaDynSDK.git#v1.3.1
+https://github.com/MetaDyn/MetaDynSDK.git#v1.3.2
 ```
 
 For the latest `main` branch instead of a pinned release:
@@ -53,7 +53,7 @@ Add this dependency to your Unity project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.metadyn.sdk": "https://github.com/MetaDyn/MetaDynSDK.git#v1.3.1"
+    "com.metadyn.sdk": "https://github.com/MetaDyn/MetaDynSDK.git#v1.3.2"
   }
 }
 ```
@@ -254,7 +254,7 @@ GitHub Pages deployments use an atomic Git Data API pipeline: WebGL build files 
 Release tags follow the form:
 
 ```text
-v1.3.1
+v1.3.2
 ```
 
 When releasing a new SDK version, update all version references together:
@@ -266,7 +266,7 @@ When releasing a new SDK version, update all version references together:
 Then create and push a matching Git tag. The SDK updater uses the tag archive URL:
 
 ```text
-https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.3.1.zip
+https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.3.2.zip
 ```
 
 ## Security Guidance
