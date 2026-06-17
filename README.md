@@ -304,4 +304,7 @@ This SDK is provided only to authorized MetaDyn customers, partners, and develop
 
 Redistribution, resale, sublicensing, public posting, or use outside the MetaDyn platform is strictly prohibited.
 
-LICENSE.md
+Read More:
+```text
+https://github.com/MetaDyn/MetaDynSDK/LICENSE.md
+```
