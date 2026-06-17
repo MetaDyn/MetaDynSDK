@@ -300,7 +300,7 @@ https://github.com/MetaDyn/MetaDynSDK
 
 MetaDyn Unity SDK is proprietary software.
 
-This SDK is provided only to authorized MetaDyn customers, partners, and developers. Use requires an active MetaDyn account, subscription, or written agreement.
+This SDK is provided only to authorized MetaDyn creators, brands, customers, partners, and developers. Use requires an active MetaDyn account, subscription, or written agreement.
 
 Redistribution, resale, sublicensing, public posting, or use outside the MetaDyn platform is strictly prohibited.
 
