@@ -4,7 +4,7 @@ Copyright 2026 MetaDyn. All rights reserved.
 
 This SDK is proprietary software owned by MetaDyn.
 
-MetaDyn grants authorized customers and partners a limited, revocable, non-exclusive, non-transferable license to use this SDK solely for the purpose of integrating approved Unity applications with MetaDyn services.
+MetaDyn grants authorized Creators, Brands, Customers, Partners, Sponsors, Supporters, and Developers a limited, revocable, non-exclusive, non-transferable license to use this SDK solely for the purpose of integrating approved Unity applications with MetaDyn services.
 
 You may not:
 
