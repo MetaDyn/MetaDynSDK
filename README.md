@@ -288,9 +288,7 @@ Keep sensitive values in private project-level configuration, environment variab
 
 MetaDyn website:
 
-```text
-https://metadyn.xyz
-```
+[MetaDyn](https://metadyn.xyz)
 
 Official SDK repository:
 
