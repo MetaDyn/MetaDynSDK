@@ -10,7 +10,7 @@ You may not:
 
 1. sell, resell, rent, lease, sublicense, distribute, publish, or otherwise make the SDK available to any third party;
 2. copy or modify the SDK except as expressly permitted by MetaDyn in writing;
-3. reverse engineer, decompile, disassemble, or attempt to derive the source code, architecture, or underlying methods of the SDK or MetaDyn services;
+3. reverse engineer, decompile, disassemble, or attempt to derive the source code, architecture, or underlying methods of the SDK or MetaDyn services or utilize AI to infer to re-create any system developed by MetaDyn;
 4. use the SDK to build, support, or operate a competing platform or service;
 5. remove copyright, trademark, license, or proprietary notices;
 6. use the SDK without an active paid MetaDyn account, subscription, or written agreement;
