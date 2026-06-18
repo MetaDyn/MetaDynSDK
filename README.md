@@ -307,7 +307,7 @@ Redistribution, resale, sublicensing, public posting, or use outside the MetaDyn
 
 Read More:
 
-[License](https://github.com/MetaDyn/MetaDynSDK/LICENSE.md)
+[License](https://github.com/MetaDyn/MetaDynSDK/blob/main/LICENSE.md)
 
 Terms of Use:
 
