@@ -2,7 +2,7 @@ MetaDyn Unity SDK License
 
 Copyright 2026 MetaDyn. All rights reserved.
 
-This SDK is proprietary software wholly developed and owned by MetaDyn.
+This SDK is proprietary software wholly developed and owned by MetaDyn (MetaDyn, LLC) Digital Fabric Services.
 
 MetaDyn grants authorized Creators, Brands, Customers, Partners, Sponsors, Supporters, and Developers a limited, revocable, non-exclusive, non-transferable license to use this SDK solely for the purpose of integrating approved Unity applications with MetaDyn services.
 
