@@ -306,12 +306,10 @@ This SDK is provided only to authorized MetaDyn Creators, Brands, Customers, Par
 Redistribution, resale, sublicensing, public posting, or use outside the MetaDyn platform is strictly prohibited.
 
 Read More:
-```text
 
 [License](https://github.com/MetaDyn/MetaDynSDK/LICENSE.md)
-```
 
 Terms of Use:
-```text
+
 [Terms of Use](https://metadyn.xyz/terms)
-```
+
