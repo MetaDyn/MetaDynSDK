@@ -297,6 +297,7 @@ Official SDK repository:
 ```text
 https://github.com/MetaDyn/MetaDynSDK
 ```
+## License and Terms of Use
 
 MetaDyn Unity SDK is proprietary software.
 
@@ -306,5 +307,11 @@ Redistribution, resale, sublicensing, public posting, or use outside the MetaDyn
 
 Read More:
 ```text
-https://github.com/MetaDyn/MetaDynSDK/LICENSE.md
+
+[License](https://github.com/MetaDyn/MetaDynSDK/LICENSE.md)
+```
+
+Terms of Use:
+```text
+[Terms of Use](https://metadyn.xyz/terms)
 ```
