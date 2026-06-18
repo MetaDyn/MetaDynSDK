@@ -8,13 +8,13 @@ MetaDyn grants authorized Creators, Brands, Customers, Partners, Sponsors, Suppo
 
 You may not:
 
-1. sell, resell, rent, lease, sublicense, distribute, publish, or otherwise make the SDK available to any third party;
-2. copy or modify the SDK except as expressly permitted by MetaDyn in writing;
-3. reverse engineer, decompile, disassemble, or attempt to derive the source code, architecture, or underlying methods of the SDK or MetaDyn services or utilize AI to infer to re-create any system developed by MetaDyn;
-4. use the SDK to build, support, or operate a competing platform or service;
-5. remove copyright, trademark, license, or proprietary notices;
-6. use the SDK without an active paid MetaDyn account, subscription, or written agreement;
-7. share API keys, credentials, tokens, or access mechanisms associated with MetaDyn services.
+1. Sell, resell, rent, lease, sublicense, distribute, publish, or otherwise make the SDK available to any third party;
+2. Copy or modify the SDK except as expressly permitted by MetaDyn in writing;
+3. Reverse engineer, decompile, disassemble, or attempt to derive the source code, architecture, or underlying methods of the SDK or MetaDyn services or utilize AI to infer to re-create any system developed by MetaDyn;
+4. Use the SDK to build, support, or operate a competing platform or service;
+5. Remove copyright, trademark, license, or proprietary notices;
+6. Use the SDK without an active paid MetaDyn account, subscription, or written agreement;
+7. Share API keys, credentials, tokens, or access mechanisms associated with MetaDyn services.
 
 All rights not expressly granted are reserved by MetaDyn.
 
