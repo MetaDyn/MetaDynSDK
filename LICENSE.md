@@ -10,7 +10,7 @@ You may not:
 2. Copy or modify the SDK except as expressly permitted by MetaDyn in writing;
 3. Reverse engineer, decompile, disassemble, or attempt to derive the source code, architecture, or underlying methods of the SDK or MetaDyn services or utilize AI to infer to re-create any system developed by MetaDyn;
 4. Use the SDK to build, support, or operate a competing platform or service;
-5. Remove copyright, trademark, license, or proprietary notices;
+5. Remove copyright, trademark, license, or proprietary notices without written or White Label agreement;
 6. Use the SDK without an active paid MetaDyn account, subscription, or written agreement;
 7. Share API keys, credentials, tokens, or access mechanisms associated with MetaDyn services.
 
