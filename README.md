@@ -290,12 +290,26 @@ Keep sensitive values in private project-level configuration, environment variab
 
 MetaDyn website:
 
-```text
-https://metadyn.xyz
-```
+[MetaDyn](https://metadyn.xyz)
 
 Official SDK repository:
 
 ```text
 https://github.com/MetaDyn/MetaDynSDK
 ```
+## License and Terms of Use
+
+MetaDyn Unity SDK is proprietary software.
+
+This SDK is provided only to authorized MetaDyn Creators, Brands, Customers, Partners, Sponsors, Supporters, and Developers. Use requires an active MetaDyn account, subscription, or written agreement.
+
+Redistribution, resale, sublicensing, public posting, or use outside the MetaDyn platform is strictly prohibited.
+
+Read More:
+
+[License](https://github.com/MetaDyn/MetaDynSDK/blob/main/LICENSE.md)
+
+Terms of Use:
+
+[Terms of Use](https://metadyn.xyz/terms)
+
