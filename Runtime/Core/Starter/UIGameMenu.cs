@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using MetaDyn.Avatar;
 using MetaDyn.Dashboard;
 using MetaDyn.Networking;
 
@@ -76,7 +77,9 @@ namespace Starter
 		private List<GameObject> _spawnedAvatarEntries = new List<GameObject>();
 		private bool _avatarsPopulated = false;
 		private bool _pendingSpawnAfterAvatarSelection = false;
-		private bool _isStartingGame = false;
+		private static bool _isStartingGame = false;
+		private string _activeAvatarModelId;
+		private MetaDynUGSPlayerController _customAvatarRestorePlayer;
 
 		private bool HasPanelGroup => PanelGroup != null;
 
@@ -242,7 +245,17 @@ var nickname = PlayerPrefs.GetString("PlayerName");
 			Debug.Log("[UIGameMenu] Local player is ready, hiding menu.");
 			
 			if (StatusText != null)
-				StatusText.text = "";
+				StatusText.text = string.IsNullOrWhiteSpace(_activeAvatarModelId)
+					? ""
+					: "Restoring custom avatar...";
+
+			MetaDynUGSMigrationState migrationState = MetaDynUGSSessionService.Instance.MigrationState;
+			bool sessionServiceOwnsMigrationRestore =
+				migrationState == MetaDynUGSMigrationState.MigrationDetected ||
+				migrationState == MetaDynUGSMigrationState.RestartingNetwork;
+
+			if (!sessionServiceOwnsMigrationRestore)
+				TryRestoreCustomAvatar();
 
 			if (HasPanelGroup)
 				PanelGroup.gameObject.SetActive(false);
@@ -322,7 +335,7 @@ var nickname = PlayerPrefs.GetString("PlayerName");
 		/// </summary>
 		private void OnProfileFetched(SupabaseProfile profile)
 		{
-			Debug.Log($"[UIGameMenu] Profile loaded! Name: {profile.name}, Avatar Index: {profile.avatar_index}, Avatar URL: {profile.avatar_url ?? "none"}");
+			Debug.Log($"[UIGameMenu] Profile loaded! Name: {profile.name}, Avatar Index: {profile.avatar_index}, Avatar URL: {profile.avatar_url ?? "none"}, Avatar Model: {profile.active_avatar_model_id ?? "none"}");
 
 			// Ensure panel is visible during connection
 			if (PanelGroup != null)
@@ -333,14 +346,16 @@ var nickname = PlayerPrefs.GetString("PlayerName");
 			if (StatusText != null)
 				StatusText.text = $"Welcome, {profile.name}!";
 
-			// Check if user has selected an avatar
-			bool hasAvatar = LoadAvatarFromProfile(profile);
+			bool hasCustomAvatar = PrepareCustomAvatarRestore(profile);
+			bool hasAvatar = hasCustomAvatar || LoadAvatarFromProfile(profile);
 
 			if (hasAvatar)
 			{
 				// Avatar already chosen - prompt user to start manually
 				if (StatusText != null)
-					StatusText.text = "Welcome back! Avatar loaded. Press Start to join.";
+					StatusText.text = hasCustomAvatar
+						? "Welcome back! Custom avatar ready. Press Start to join."
+						: "Welcome back! Avatar loaded. Press Start to join.";
 			}
 			else
 			{
@@ -369,7 +384,62 @@ var nickname = PlayerPrefs.GetString("PlayerName");
 				DisplayNameText.text = profile.name;
 			}
 
+			if (PrepareCustomAvatarRestore(profile) && StatusText != null)
+			{
+				StatusText.text = "Custom avatar found. Press Start to join.";
+			}
+
 			LoadProfileAvatarImage(profile);
+		}
+
+		private bool PrepareCustomAvatarRestore(SupabaseProfile profile)
+		{
+			_activeAvatarModelId = profile != null ? profile.active_avatar_model_id : null;
+			_customAvatarRestorePlayer = null;
+
+			if (string.IsNullOrWhiteSpace(_activeAvatarModelId))
+				return false;
+
+			Debug.Log($"[UIGameMenu] Prepared custom avatar restore: {_activeAvatarModelId}");
+			return true;
+		}
+
+		private void TryRestoreCustomAvatar()
+		{
+			if (string.IsNullOrWhiteSpace(_activeAvatarModelId))
+				return;
+
+			MetaDynUGSPlayerController player = FindLocalPlayer();
+			if (player == null)
+				return;
+
+			if (_customAvatarRestorePlayer == player)
+				return;
+
+			GLBAvatarLoader loader = GLBAvatarLoader.Instance != null
+				? GLBAvatarLoader.Instance
+				: FindFirstObjectByType<GLBAvatarLoader>();
+
+			if (loader == null)
+			{
+				Debug.LogWarning("[UIGameMenu] Cannot restore custom avatar: GLBAvatarLoader not found.");
+				return;
+			}
+
+			_customAvatarRestorePlayer = player;
+			Debug.Log($"[UIGameMenu] Restoring custom avatar model {_activeAvatarModelId}.");
+			loader.LoadAndApplyStoredAvatar(_activeAvatarModelId, player);
+		}
+
+		private static MetaDynUGSPlayerController FindLocalPlayer()
+		{
+			foreach (MetaDynUGSPlayerController player in FindObjectsByType<MetaDynUGSPlayerController>(FindObjectsSortMode.None))
+			{
+				if (player.IsOwner)
+					return player;
+			}
+
+			return null;
 		}
 
 		/// <summary>
@@ -589,9 +659,22 @@ var nickname = PlayerPrefs.GetString("PlayerName");
 		/// </summary>
 		public void SelectAvatar(int index)
 		{
+			// An explicit preset choice supersedes any previously active uploaded model.
+			// Keep the uploaded asset/model record for the future My Avatars library,
+			// but prevent the saved GLB from being restored over the selected prefab.
+			bool hadActiveCustomAvatar = !string.IsNullOrWhiteSpace(_activeAvatarModelId);
+			_activeAvatarModelId = null;
+			_customAvatarRestorePlayer = null;
+
+			SupabaseProfile cachedProfile = SupabaseAuthManager.Instance?.CurrentSession?.user?.profile;
+			if (cachedProfile != null)
+				cachedProfile.active_avatar_model_id = null;
+
 			PlayerPrefs.SetInt(AVATAR_CHOICE_KEY, index);
 			PlayerPrefs.Save();
 			Debug.Log($"[Avatar] Avatar at index {index} selected");
+			if (hadActiveCustomAvatar)
+				Debug.Log("[Avatar] Cleared the active uploaded avatar selection; the saved model remains available for a future My Avatars library.");
 			UpdateAvatarButtonVisuals();
 
 			// Save to Supabase if authenticated
@@ -631,7 +714,7 @@ var nickname = PlayerPrefs.GetString("PlayerName");
 		}
 
 		/// <summary>
-		/// Load avatar index from Supabase profile into PlayerPrefs.
+		/// Load uploaded avatar model or prefab avatar index from Supabase profile into runtime state.
 		/// Returns true if avatar is set, false if user needs to pick one.
 		/// </summary>
 		public bool LoadAvatarFromProfile(SupabaseProfile profile)
@@ -641,6 +724,9 @@ var nickname = PlayerPrefs.GetString("PlayerName");
 				Debug.LogWarning("[UIGameMenu] Profile is null, cannot load avatar");
 				return false;
 			}
+
+			if (PrepareCustomAvatarRestore(profile))
+				return true;
 
 			if (profile.NeedsAvatarSelection)
 			{

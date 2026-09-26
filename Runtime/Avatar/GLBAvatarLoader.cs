@@ -1,8 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using GLTFast;
+using MetaDyn.Dashboard;
 using MetaDyn.Networking;
 using Starter;
 using UnityEngine;
@@ -21,12 +23,21 @@ namespace MetaDyn.Avatar
     /// </summary>
     public class GLBAvatarLoader : MonoBehaviour
     {
+        public static GLBAvatarLoader Instance { get; private set; }
+
         [SerializeField] private Button uploadButton;
 
-        // Modello GLB attualmente applicato (distrutto prima di applicarne uno nuovo,
+        // Modelli GLB applicati per player (distrutti prima di applicarne uno nuovo,
         // per evitare nomi di ossa duplicati nella gerarchia → binding ambiguo → T-pose)
-        private GameObject _currentAvatarModel;
+        private readonly Dictionary<ulong, GameObject> _currentAvatarModels = new Dictionary<ulong, GameObject>();
+        // glTFast owns the meshes, materials, textures, and import allocations used by
+        // each instantiated model. Keep the importer alive with the avatar, then dispose
+        // it when that avatar is replaced or its network player despawns.
+        private readonly Dictionary<ulong, GltfImport> _currentAvatarImports = new Dictionary<ulong, GltfImport>();
         private byte[] _pendingAvatarData;
+        private string _pendingAvatarModelId;
+        private byte[] _cachedAvatarData;
+        private string _cachedAvatarModelId;
         private UIGameMenu _gameMenu;
 
         private const string GltfMetallicMaterialPath = "GLTFastShaders/gltfast_metallic";
@@ -64,7 +75,16 @@ namespace MetaDyn.Avatar
 
         private void Awake()
         {
+            if (Instance == null)
+                Instance = this;
+
             _gameMenu = GetComponent<UIGameMenu>();
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
         }
 
         private void OnEnable()
@@ -85,13 +105,18 @@ namespace MetaDyn.Avatar
             uploadButton.onClick.AddListener(OpenFilePicker);
         }
 
-        private void HandleLocalPlayerReady()
+        private async void HandleLocalPlayerReady()
         {
             if (_pendingAvatarData != null)
             {
                 Debug.Log("[GLBAvatarLoader] Applying pending custom avatar to newly spawned player.");
-                _ = LoadAndApply(_pendingAvatarData);
+                string modelId = _pendingAvatarModelId;
+                bool applied = await LoadAndApply(_pendingAvatarData);
+                if (applied && !string.IsNullOrEmpty(modelId))
+                    PublishActiveAvatarModel(modelId);
+
                 _pendingAvatarData = null;
+                _pendingAvatarModelId = null;
             }
         }
 
@@ -159,7 +184,7 @@ namespace MetaDyn.Avatar
             if (!string.IsNullOrEmpty(path))
             {
                 byte[] bytes = System.IO.File.ReadAllBytes(path);
-                _ = LoadAndApply(bytes);
+                ProcessSelectedAvatarFile(bytes, Path.GetFileName(path));
             }
 #elif UNITY_WEBGL
             // Il JS apre il file picker del browser e richiama OnWebGLFileSelected
@@ -182,14 +207,56 @@ namespace MetaDyn.Avatar
             // Pulisci il file temporaneo dal FS virtuale
             try { System.IO.File.Delete(virtualPath); } catch { /* best-effort */ }
 
-            _ = LoadAndApply(bytes);
+            ProcessSelectedAvatarFile(bytes, Path.GetFileName(virtualPath));
+        }
+
+        private void ProcessSelectedAvatarFile(byte[] bytes, string filename)
+        {
+            if (SupabaseAuthManager.Instance == null || !SupabaseAuthManager.Instance.IsAuthenticated)
+            {
+                Debug.Log("[GLBAvatarLoader] User is not authenticated. Applying GLB locally without cloud persistence.");
+                _ = LoadAndApply(bytes);
+                return;
+            }
+
+            if (_gameMenu != null && _gameMenu.StatusText != null)
+                _gameMenu.StatusText.text = "Uploading avatar...";
+
+            MetaDynAvatarStorageService.GetOrCreate().UploadAndSelectAvatar(
+                bytes,
+                filename,
+                record =>
+                {
+                    if (_gameMenu != null && _gameMenu.StatusText != null)
+                        _gameMenu.StatusText.text = "Avatar saved. Loading...";
+
+                    _ = LoadApplyAndPublish(bytes, record.id);
+                },
+                error =>
+                {
+                    Debug.LogError($"[GLBAvatarLoader] Avatar upload failed: {error}");
+                    if (_gameMenu != null && _gameMenu.StatusText != null)
+                        _gameMenu.StatusText.text = $"Avatar upload failed: {error}";
+                });
+        }
+
+        private async Task LoadApplyAndPublish(byte[] bytes, string avatarModelId)
+        {
+            CacheAvatarData(avatarModelId, bytes);
+            _pendingAvatarModelId = avatarModelId;
+            bool applied = await LoadAndApply(bytes);
+            if (applied)
+            {
+                PublishActiveAvatarModel(avatarModelId);
+                _pendingAvatarModelId = null;
+            }
         }
 
         // ──────────────────────────────────────────────────────────────
         // Caricamento GLB
         // ──────────────────────────────────────────────────────────────
 
-        private async Task LoadAndApply(byte[] bytes)
+        private async Task<bool> LoadAndApply(byte[] bytes)
         {
             MetaDynUGSPlayerController player = FindLocalPlayer();
             if (player == null)
@@ -201,50 +268,150 @@ namespace MetaDyn.Avatar
                     _gameMenu.StatusText.text = "Avatar Uploaded! Click Start to Join.";
                     _gameMenu.StatusText.color = Color.green;
                 }
+                return false;
+            }
+
+            return await LoadAndApplyToPlayer(bytes, player);
+        }
+
+        public void LoadAndApplyStoredAvatar(string avatarModelId, MetaDynUGSPlayerController targetPlayer)
+        {
+            if (string.IsNullOrWhiteSpace(avatarModelId) || targetPlayer == null)
+                return;
+
+            if (_cachedAvatarData != null && _cachedAvatarData.Length > 0 &&
+                string.Equals(_cachedAvatarModelId, avatarModelId, System.StringComparison.Ordinal))
+            {
+                Debug.Log($"[GLBAvatarLoader] Restoring cached avatar model {avatarModelId} without a Storage download.");
+                _ = LoadAndApplyStoredAvatarBytes(_cachedAvatarData, avatarModelId, targetPlayer);
                 return;
             }
+
+            MetaDynAvatarStorageService.GetOrCreate().FetchAvatarModel(
+                avatarModelId,
+                model =>
+                {
+                    MetaDynAvatarStorageService.GetOrCreate().DownloadAvatarBytes(
+                        model,
+                        bytes =>
+                        {
+                            if (targetPlayer != null && targetPlayer.IsOwner)
+                                CacheAvatarData(avatarModelId, bytes);
+
+                            _ = LoadAndApplyStoredAvatarBytes(bytes, avatarModelId, targetPlayer);
+                        },
+	                    error =>
+	                    {
+	                        Debug.LogError($"[GLBAvatarLoader] Failed to download avatar model {avatarModelId}: {error}");
+	                        NotifyMigrationPresentationReady(targetPlayer, avatarModelId, false);
+	                    });
+	            },
+	            error =>
+	            {
+	                Debug.LogError($"[GLBAvatarLoader] Failed to fetch avatar model {avatarModelId}: {error}");
+	                NotifyMigrationPresentationReady(targetPlayer, avatarModelId, false);
+	            });
+        }
+
+        private void CacheAvatarData(string avatarModelId, byte[] bytes)
+        {
+            if (string.IsNullOrWhiteSpace(avatarModelId) || bytes == null || bytes.Length == 0)
+                return;
+
+            _cachedAvatarModelId = avatarModelId;
+            _cachedAvatarData = bytes;
+        }
+
+        private async Task LoadAndApplyStoredAvatarBytes(byte[] bytes, string avatarModelId, MetaDynUGSPlayerController targetPlayer)
+        {
+            bool applied = await LoadAndApplyToPlayer(bytes, targetPlayer);
+            if (applied && targetPlayer != null && targetPlayer.IsOwner)
+                targetPlayer.PublishCustomAvatarModel(avatarModelId);
+
+            NotifyMigrationPresentationReady(targetPlayer, avatarModelId, applied);
+        }
+
+        private static void NotifyMigrationPresentationReady(
+            MetaDynUGSPlayerController targetPlayer,
+            string avatarModelId,
+            bool succeeded)
+        {
+            if (targetPlayer == null || !targetPlayer.IsOwner) return;
+
+            MetaDynUGSSessionService.Instance.NotifyLocalAvatarPresentationReady(
+                targetPlayer,
+                avatarModelId,
+                succeeded);
+        }
+
+        public async Task<bool> LoadAndApplyToPlayer(byte[] bytes, MetaDynUGSPlayerController player)
+        {
+            if (player == null)
+                return false;
 
             var gltf = new GltfImport();
-            bool loaded = await gltf.Load(bytes);
-            if (!loaded)
+            bool importerRetained = false;
+            try
             {
-                Debug.LogError("[GLBAvatarLoader] File GLB non valido o corrotto.");
-                return;
-            }
+                bool loaded = await gltf.Load(bytes);
+                if (!loaded)
+                {
+                    Debug.LogError("[GLBAvatarLoader] File GLB non valido o corrotto.");
+                    return false;
+                }
 
-            var container = new GameObject("GLB_AvatarImport");
-            bool instantiated = await gltf.InstantiateMainSceneAsync(container.transform);
-            if (!instantiated || container.transform.childCount == 0)
-            {
-                Debug.LogError("[GLBAvatarLoader] Scena GLB vuota — file non valido.");
+                var container = new GameObject("GLB_AvatarImport");
+                bool instantiated = await gltf.InstantiateMainSceneAsync(container.transform);
+                if (!instantiated || container.transform.childCount == 0)
+                {
+                    Debug.LogError("[GLBAvatarLoader] Scena GLB vuota — file non valido.");
+                    Destroy(container);
+                    return false;
+                }
+
+                // Stacca il modello dal container temporaneo prima di distruggerlo
+                GameObject model = container.transform.GetChild(0).gameObject;
+                model.transform.SetParent(null, false);
                 Destroy(container);
-                return;
+
+                LogMaterialSnapshot("after glTFast instantiate", model);
+                ApplyResourceGltfMaterials(model, "after glTFast instantiate");
+                LogMaterialSnapshot("after Resources material conversion", model);
+
+                bool applied = ApplyToPlayer(player, model);
+                if (!applied)
+                    return false;
+
+                _currentAvatarImports[player.OwnerClientId] = gltf;
+                importerRetained = true;
+                return true;
             }
-
-            // Stacca il modello dal container temporaneo prima di distruggerlo
-            GameObject model = container.transform.GetChild(0).gameObject;
-            model.transform.SetParent(null, false);
-            Destroy(container);
-
-            LogMaterialSnapshot("after glTFast instantiate", model);
-            ApplyResourceGltfMaterials(model, "after glTFast instantiate");
-            LogMaterialSnapshot("after Resources material conversion", model);
-
-            ApplyToPlayer(player, model);
+            finally
+            {
+                if (!importerRetained)
+                    gltf.Dispose();
+            }
         }
 
         // ──────────────────────────────────────────────────────────────
         // Applicazione avatar al player
         // ──────────────────────────────────────────────────────────────
 
-        private void ApplyToPlayer(MetaDynUGSPlayerController player, GameObject model)
+        private bool ApplyToPlayer(MetaDynUGSPlayerController player, GameObject model)
         {
-            // Distruggi il modello GLB precedente PRIMA dello snapshot e del binding:
+            // Capture the current local/replicated state before removing either the preset
+            // skeleton or a previously loaded GLB hierarchy.
+            player.PrepareAnimatorForAvatarSwap();
+
+            // Distruggi il modello GLB precedente PRIMA del nuovo binding:
             // due scheletri con nomi di ossa identici rendono ambiguo il binding e
             // bloccano l'avatar in T-pose. DestroyImmediate perché Destroy è differito
             // a fine frame e sopravviverebbe durante BuildHumanAvatar/Rebind.
-            if (_currentAvatarModel != null)
-                DestroyImmediate(_currentAvatarModel);
+            ulong ownerId = player.OwnerClientId;
+            if (_currentAvatarModels.TryGetValue(ownerId, out GameObject currentAvatarModel) && currentAvatarModel != null)
+                DestroyImmediate(currentAvatarModel);
+            _currentAvatarModels.Remove(ownerId);
+            DisposeAvatarImport(ownerId);
 
             // AvatarSdkPlayerLipSync vive sul Player (non sull'avatar) e cachea riferimenti
             // a headMesh/teethMesh (SkinnedMeshRenderer dell'avatar AvatarSDK originale) nelle
@@ -282,7 +449,7 @@ namespace MetaDyn.Avatar
                 Debug.LogError("[GLBAvatarLoader] Avatar non valido — " +
                                "verifica che le ossa seguano lo standard RPM (LeftUpperArm, Hips, ecc.)");
                 Destroy(model);
-                return;
+                return false;
             }
 
             // Centra e orienta l'avatar sull'origine del player. La SCALA importata da
@@ -298,10 +465,9 @@ namespace MetaDyn.Avatar
             model.transform.localPosition = Vector3.zero;
             model.transform.localRotation = Quaternion.identity;
 
-            // Aggiorna l'Animator del player con il nuovo Avatar
-            player.Animator.avatar = avatar;
-            player.Animator.Rebind();
-            player.Animator.Update(0f);
+            // Rebind the existing root Animator while preserving the locomotion state
+            // already received by remote proxies through OwnerNetworkAnimator.
+            player.ApplyRuntimeAvatar(avatar);
 
             // Update the player controller's model root and refresh renderers
             player.ModelRoot = model.transform;
@@ -323,10 +489,40 @@ namespace MetaDyn.Avatar
             }
 
             // Tieni traccia del modello applicato per poterlo rimuovere al prossimo upload
-            _currentAvatarModel = model;
+            _currentAvatarModels[ownerId] = model;
             StartCoroutine(VerifyMaterialsAfterFrames(model));
 
             Debug.Log("[GLBAvatarLoader] Avatar GLB applicato con successo!");
+            return true;
+        }
+
+        public void ReleaseAvatarResources(ulong ownerId)
+        {
+            if (_currentAvatarModels.TryGetValue(ownerId, out GameObject currentAvatarModel) && currentAvatarModel != null)
+                Destroy(currentAvatarModel);
+            _currentAvatarModels.Remove(ownerId);
+            DisposeAvatarImport(ownerId);
+        }
+
+        private void DisposeAvatarImport(ulong ownerId)
+        {
+            if (!_currentAvatarImports.TryGetValue(ownerId, out GltfImport gltf))
+                return;
+
+            _currentAvatarImports.Remove(ownerId);
+            gltf.Dispose();
+        }
+
+        private void PublishActiveAvatarModel(string avatarModelId)
+        {
+            if (string.IsNullOrWhiteSpace(avatarModelId))
+                return;
+
+            MetaDynUGSPlayerController player = FindLocalPlayer();
+            if (player == null)
+                return;
+
+            player.PublishCustomAvatarModel(avatarModelId);
         }
 
         private IEnumerator VerifyMaterialsAfterFrames(GameObject model)

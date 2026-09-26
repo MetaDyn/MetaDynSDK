@@ -5,7 +5,7 @@ namespace MetaDyn.Networking
 {
     /// <summary>
     /// A client-authoritative version of NetworkAnimator.
-    /// By returning false in OnIsServerAuthoritative, the owner client can synchronize animator state to the server and other clients.
+    /// By returning false in OnIsServerAuthoritative, the owning client can synchronize animator state to other observers in both client-server and Distributed Authority topologies.
     /// </summary>
     [DisallowMultipleComponent]
     public class OwnerNetworkAnimator : NetworkAnimator

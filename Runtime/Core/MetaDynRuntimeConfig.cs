@@ -3,6 +3,15 @@ using UnityEngine;
 namespace MetaDyn
 {
     /// <summary>
+    /// Selects the mutually exclusive NGO networking topology used by a MetaDyn space.
+    /// </summary>
+    public enum MetaDynNetworkTopology
+    {
+        DistributedAuthority = 0,
+        RelayClientHost = 1
+    }
+
+    /// <summary>
     /// Runtime configuration for MetaDyn builds.
     /// Created automatically during build/deployment process.
     /// This ScriptableObject must be placed in a Resources folder to be accessible at runtime.
@@ -48,6 +57,17 @@ namespace MetaDyn
         
         [Tooltip("Maximum players allowed in this world")]
         public int maxPlayers = 8;
+
+        [Header("Networking")]
+        [Tooltip("Distributed Authority is the production social-space topology. Relay Client Host remains only as a temporary rollback path during conversion.")]
+        public MetaDynNetworkTopology networkTopology = MetaDynNetworkTopology.DistributedAuthority;
+
+        [Tooltip("UGS Relay region used by Distributed Authority. WebGL requires an explicit region because Relay QoS auto-selection is not supported there.")]
+        public string relayRegion = "us-central1";
+
+        [HideInInspector]
+        [Tooltip("Legacy rejected Relay host-migration setting retained temporarily for serialized compatibility. Runtime code no longer enables it.")]
+        public bool enableHostMigration = false;
         
         [Header("Build Information")]
         [Tooltip("Automatically set during build/deployment")]

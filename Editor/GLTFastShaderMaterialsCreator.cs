@@ -43,15 +43,45 @@ namespace MetaDyn.Editor
                 }
 
                 string matPath = $"{k_OutputFolder}/{matName}.mat";
-                if (AssetDatabase.LoadAssetAtPath<Material>(matPath) != null)
+                if (AssetDatabase.LoadAssetAtPath<Material>(matPath) == null)
+                {
+                    AssetDatabase.CreateAsset(new Material(shader), matPath);
+                    created++;
+                    Debug.Log($"[GLTFastShaderMaterialsCreator] Creato: {matPath}");
+                }
+                else
                 {
                     Debug.Log($"[GLTFastShaderMaterialsCreator] Già esistente: {matPath}");
-                    continue;
                 }
 
-                AssetDatabase.CreateAsset(new Material(shader), matPath);
-                created++;
-                Debug.Log($"[GLTFastShaderMaterialsCreator] Creato: {matPath}");
+                // Variante Transparent/Blend: senza questa, Unity strippa la variante
+                // _SURFACE_TYPE_TRANSPARENT dello shader e i .glb con alpha channel
+                // restano opachi in build WebGL. Stesse keyword/proprietà che GLTFast
+                // imposta a runtime in UniveralRPMaterialGenerator.SetShaderModeBlend.
+                string transparentPath = $"{k_OutputFolder}/{matName}_transparent.mat";
+                if (AssetDatabase.LoadAssetAtPath<Material>(transparentPath) == null)
+                {
+                    var transparentMat = new Material(shader);
+                    transparentMat.SetOverrideTag("RenderType", "Transparent");
+                    transparentMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                    transparentMat.EnableKeyword("_DISABLE_SSR_TRANSPARENT");
+                    transparentMat.EnableKeyword("_ENABLE_FOG_ON_TRANSPARENT");
+                    transparentMat.SetFloat("_Surface", 1);
+                    transparentMat.SetFloat("_ZWrite", 0);
+                    transparentMat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                    transparentMat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                    transparentMat.SetFloat("_AlphaDstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                    transparentMat.SetFloat("_ZTestGBuffer", (float)UnityEngine.Rendering.CompareFunction.Equal);
+                    transparentMat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+
+                    AssetDatabase.CreateAsset(transparentMat, transparentPath);
+                    created++;
+                    Debug.Log($"[GLTFastShaderMaterialsCreator] Creato: {transparentPath}");
+                }
+                else
+                {
+                    Debug.Log($"[GLTFastShaderMaterialsCreator] Già esistente: {transparentPath}");
+                }
             }
 
             if (created > 0)

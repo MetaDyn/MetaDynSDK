@@ -3,7 +3,7 @@
 Official Unity Package Manager SDK for building MetaDyn spaces: browser-first immersive worlds with Unity Gaming Services, Netcode for GameObjects, Vivox communication, Supabase identity hooks, creator tooling, inventory bundling, and embodied AI systems.
 
 Package name: `com.metadyn.sdk`
-Current release: `v1.3.2`
+Current release: `v1.4.0`
 Unity version: `6000.0` or newer
 Primary target: WebGL
 
@@ -13,8 +13,9 @@ MetaDyn is a reusable Unity toolkit for creating deployable social 3D spaces. It
 
 Core systems include:
 
-- UGS/NGO multiplayer session flow with Lobby, Relay, deterministic space joins, and player spawning.
-- Vivox voice and text integration for social communication.
+- UGS Multiplayer Sessions with NGO Distributed Authority, Relay WSS, and locally owned player spawning.
+- WebGL room text through NGO and spatial voice through WebRTC; native Vivox text and voice remain supported.
+- Authenticated GLB avatar upload, Supabase persistence, and networked avatar restoration.
 - WebGL-first auth bridge support for dashboard SSO and Unity fallback login.
 - Creator-facing runtime components such as seats, doors, light switches, triggers, interactables, projection surfaces, and entrance points.
 - Mobile WebGL controls and platform detection helpers.
@@ -35,7 +36,7 @@ In Unity:
 4. Enter:
 
 ```text
-https://github.com/MetaDyn/MetaDynSDK.git#v1.3.2
+https://github.com/MetaDyn/MetaDynSDK.git#v1.4.0
 ```
 
 For the latest `main` branch instead of a pinned release:
@@ -53,7 +54,7 @@ Add this dependency to your Unity project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.metadyn.sdk": "https://github.com/MetaDyn/MetaDynSDK.git#v1.3.2"
+    "com.metadyn.sdk": "https://github.com/MetaDyn/MetaDynSDK.git#v1.4.0"
   }
 }
 ```
@@ -66,11 +67,12 @@ The package declares these Unity package dependencies:
 
 ```json
 {
-  "com.unity.netcode.gameobjects": "2.1.0",
-  "com.unity.services.lobby": "1.2.1",
-  "com.unity.services.relay": "1.1.0",
-  "com.unity.services.vivox": "16.4.2",
-  "com.unity.cloud.gltfast": "6.11.0"
+  "com.unity.netcode.gameobjects": "2.7.0",
+  "com.unity.services.multiplayer": "2.3.0",
+  "com.unity.services.authentication": "3.7.0",
+  "com.unity.services.vivox": "16.10.0",
+  "com.unity.cloud.gltfast": "6.14.1",
+  "com.unity.ugui": "2.0.0"
 }
 ```
 
@@ -254,7 +256,7 @@ GitHub Pages deployments use an atomic Git Data API pipeline: WebGL build files 
 Release tags follow the form:
 
 ```text
-v1.3.2
+v1.4.0
 ```
 
 When releasing a new SDK version, update all version references together:
@@ -266,7 +268,7 @@ When releasing a new SDK version, update all version references together:
 Then create and push a matching Git tag. The SDK updater uses the tag archive URL:
 
 ```text
-https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.3.2.zip
+https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.4.0.zip
 ```
 
 ## Security Guidance

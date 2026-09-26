@@ -27,7 +27,8 @@ namespace MetaDyn.UserList
             }
         }
 
-        [SerializeField] private bool firstPlayerIsAdmin = true;
+        [HideInInspector]
+        [SerializeField] private bool firstPlayerIsAdmin = false;
         [SerializeField] private bool startPlayersMuted = true;
 
         public event Action<ulong, MetaDynUGSUserData> OnUserJoined;
@@ -100,11 +101,13 @@ namespace MetaDyn.UserList
                 _users.Add(clientId, userData);
                 Debug.Log($"[UGS UserList] Registered player: {playerName} (ClientId: {clientId}).");
                 
-                // NEW: Ensure local player starts muted if configured
+                // Native Vivox starts the local participant with the configured mute state.
+#if !UNITY_WEBGL
                 if (clientId == Unity.Netcode.NetworkManager.Singleton.LocalClientId && MetaDyn.Networking.MetaDynVivoxService.Instance != null)
                 {
                     MetaDyn.Networking.MetaDynVivoxService.Instance.SetMuted(userData.IsMuted);
                 }
+#endif
 
                 OnUserJoined?.Invoke(clientId, userData);
             }
@@ -117,6 +120,40 @@ namespace MetaDyn.UserList
 
             Debug.Log($"[UGS UserList] Unregistered player: {clientId}.");
             OnUserLeft?.Invoke(clientId);
+        }
+
+        public void RestorePlayer(
+            ulong clientId,
+            string playerName,
+            string userId,
+            byte permissionLevel,
+            bool isMuted)
+        {
+            playerName = SanitizeName(playerName);
+            userId ??= string.Empty;
+
+            bool existed = _users.ContainsKey(clientId);
+            var userData = new MetaDynUGSUserData
+            {
+                ClientId = clientId,
+                PlayerName = new FixedString32Bytes(playerName),
+                UserId = new FixedString64Bytes(userId),
+                IsMuted = isMuted,
+                PermissionLevel = permissionLevel
+            };
+
+            _users[clientId] = userData;
+#if !UNITY_WEBGL
+            if (clientId == Unity.Netcode.NetworkManager.Singleton.LocalClientId && MetaDynVivoxService.Instance != null)
+                MetaDynVivoxService.Instance.SetMuted(isMuted);
+#endif
+
+            if (existed)
+                OnUserDataChanged?.Invoke(clientId, userData);
+            else
+                OnUserJoined?.Invoke(clientId, userData);
+
+            Debug.Log($"[UGS UserList] Restored player: {playerName} (ClientId: {clientId}, Permission: {permissionLevel}).");
         }
 
         public bool TryGetUser(ulong clientId, out MetaDynUGSUserData userData)
@@ -164,24 +201,35 @@ namespace MetaDyn.UserList
             _users[targetClientId] = userData;
             Debug.Log($"[UGS UserList] Player {userData.PlayerName} {(muted ? "muted" : "unmuted")} by {requestingClientId}.");
 
-            // Sync with Vivox if it's the local player
+            // Sync the native Vivox capture state if this is the local player.
+#if !UNITY_WEBGL
             if (targetClientId == Unity.Netcode.NetworkManager.Singleton.LocalClientId && MetaDynVivoxService.Instance != null)
             {
                 MetaDynVivoxService.Instance.SetMuted(muted);
             }
+#endif
 
             OnUserDataChanged?.Invoke(targetClientId, userData);
 }
 
         private byte ResolvePermission(ulong clientId, string userId)
         {
+            ulong localClientId = Unity.Netcode.NetworkManager.Singleton != null
+                ? Unity.Netcode.NetworkManager.Singleton.LocalClientId
+                : ulong.MaxValue;
             string ownerId = MetaDynRuntimeConfig.Instance != null ? MetaDynRuntimeConfig.Instance.ownerId : string.Empty;
-            if (!string.IsNullOrEmpty(ownerId) && !string.IsNullOrEmpty(userId) && userId == ownerId)
+            if (clientId == localClientId &&
+                !string.IsNullOrEmpty(ownerId) &&
+                !string.IsNullOrEmpty(userId) &&
+                userId == ownerId)
             {
                 return 2;
             }
 
-            return firstPlayerIsAdmin && _users.Count == 0 ? (byte)2 : (byte)0;
+            // Network/session ownership and roster order never grant space administration.
+            // Guest deployments remain without an administrator until a separate trusted
+            // dashboard-free owner bootstrap is implemented.
+            return 0;
         }
 
         private static string SanitizeName(string playerName)

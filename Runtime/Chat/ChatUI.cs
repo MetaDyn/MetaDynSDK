@@ -3,12 +3,14 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using MetaDyn.Networking;
+using MetaDyn.UserList;
 
 namespace MetaDyn.Chat
 {
     /// <summary>
     /// Controls the Chat UI, displaying messages in a scrollable view with input field.
-    /// Updated to use MetaDynVivoxService for UGS-native chat.
+    /// Uses NGO Distributed Authority RPCs for WebGL text chat and Vivox for
+    /// native-platform text chat.
     /// </summary>
     public class ChatUI : MonoBehaviour
     {
@@ -89,7 +91,11 @@ namespace MetaDyn.Chat
             if (chatPanel != null)
                 chatPanel.SetActive(startVisible);
 
-            // Subscribe to Vivox events
+#if UNITY_WEBGL
+            SubscribeToNetworkChatEvents();
+            UpdateNetworkChatStatus();
+#else
+            // Native platforms retain Vivox text and positional voice.
             if (MetaDynVivoxService.Instance != null)
             {
                 SubscribeToVivoxEvents();
@@ -99,6 +105,7 @@ namespace MetaDyn.Chat
                 Debug.LogWarning("[ChatUI] MetaDynVivoxService not found. Will retry in Update.");
                 UpdateStatus("Vivox not initialized");
             }
+#endif
 
             // Get local username from PlayerPrefs
             _localUserName = PlayerPrefs.GetString("PlayerName", "Unknown");
@@ -119,11 +126,17 @@ namespace MetaDyn.Chat
                 }
             }
 
+#if UNITY_WEBGL
+            if (!_isSubscribed)
+                SubscribeToNetworkChatEvents();
+            UpdateNetworkChatStatus();
+#else
             // Retry connection to Vivox if not found
             if (MetaDynVivoxService.Instance != null && !_isSubscribed)
             {
                 SubscribeToVivoxEvents();
             }
+#endif
 
             // Toggle visibility with key
             if (Input.GetKeyDown(toggleChatKey))
@@ -169,11 +182,16 @@ namespace MetaDyn.Chat
                 InputManager.UnlockInput("ChatInput");
             }
 
+#if UNITY_WEBGL
+            MetaDynUGSPlayerController.OnChatMessageReceived -= OnNetworkChatMessageReceived;
+            MetaDynUGSPlayerController.OnLocalPlayerReady -= UpdateNetworkChatStatus;
+#else
             if (MetaDynVivoxService.Instance != null)
             {
                 MetaDynVivoxService.Instance.OnTextMessageReceived -= OnMessageReceived;
                 MetaDynVivoxService.Instance.OnLoginStatusChanged -= UpdateConnectionStatus;
             }
+#endif
 
             if (sendButton != null)
                 sendButton.onClick.RemoveListener(OnSendButtonClicked);
@@ -226,8 +244,34 @@ namespace MetaDyn.Chat
             MetaDynVivoxService.Instance.OnLoginStatusChanged += UpdateConnectionStatus;
 
             _isSubscribed = true;
+            UpdateConnectionStatus(MetaDynVivoxService.Instance.IsChannelReady);
             Debug.Log("[ChatUI] Subscribed to MetaDynVivoxService events");
         }
+
+#if UNITY_WEBGL
+        private void SubscribeToNetworkChatEvents()
+        {
+            if (_isSubscribed)
+                return;
+
+            MetaDynUGSPlayerController.OnChatMessageReceived += OnNetworkChatMessageReceived;
+            MetaDynUGSPlayerController.OnLocalPlayerReady += UpdateNetworkChatStatus;
+            _isSubscribed = true;
+            Debug.Log("[UGS CHAT] ChatUI subscribed to Distributed Authority text events.");
+        }
+
+        private void UpdateNetworkChatStatus()
+        {
+            MetaDynUGSPlayerController localPlayer = MetaDynUGSPlayerController.LocalPlayer;
+            bool isReady = localPlayer != null
+                && localPlayer.IsSpawned
+                && localPlayer.IsOwner
+                && localPlayer.NetworkManager != null
+                && localPlayer.NetworkManager.IsConnectedClient;
+
+            UpdateConnectionStatus(isReady);
+        }
+#endif
 
         #endregion
 
@@ -394,7 +438,7 @@ namespace MetaDyn.Chat
 
         private async void SendMessage()
         {
-            if (messageInput == null || MetaDynVivoxService.Instance == null)
+            if (messageInput == null)
                 return;
 
             string message = messageInput.text.Trim();
@@ -406,19 +450,26 @@ namespace MetaDyn.Chat
             messageInput.Select();
             messageInput.ActivateInputField();
 
-            // Local Echo: Add message immediately so user sees it even if Vivox is slow or fails
-            // This also helps verify if the UI is working vs network
-            DisplayMessage(_localUserName, message);
-
             try
             {
-                // Send to Vivox
+#if UNITY_WEBGL
+                MetaDynUGSPlayerController localPlayer = MetaDynUGSPlayerController.LocalPlayer;
+                if (localPlayer == null || !localPlayer.TrySendChatMessage(message))
+                    throw new System.InvalidOperationException("The local DA player is not ready to send chat.");
+#else
+                if (MetaDynVivoxService.Instance == null)
+                    throw new System.InvalidOperationException("Vivox is unavailable.");
+
                 await MetaDynVivoxService.Instance.SendTextMessageAsync(message);
+                // Echo only after Vivox accepts the send. A local message must not imply
+                // successful delivery while the user is logged out or outside a channel.
+                DisplayMessage(_localUserName, message);
+#endif
             }
             catch (System.Exception ex)
             {
                 Debug.LogError("[ChatUI] Failed to send message: " + ex.Message);
-                DisplayMessage("System", "Failed to send message: Vivox connection error.");
+                DisplayMessage("System", "Failed to send message: chat connection unavailable.");
             }
         }
 
@@ -436,6 +487,19 @@ namespace MetaDyn.Chat
                 _messageQueue.Enqueue(new QueuedMessage { sender = sender, message = message });
             }
         }
+
+#if UNITY_WEBGL
+        private void OnNetworkChatMessageReceived(ulong senderClientId, string sender, string message)
+        {
+            if (MetaDynUGSUserListManager.Instance.IsUserBlockedLocally(senderClientId))
+                return;
+
+            lock (_queueLock)
+            {
+                _messageQueue.Enqueue(new QueuedMessage { sender = sender, message = message });
+            }
+        }
+#endif
 
         #endregion
 }

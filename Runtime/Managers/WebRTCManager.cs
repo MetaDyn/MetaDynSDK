@@ -86,8 +86,6 @@ public class WebRTCManager : NetworkBehaviour
     // JavaScript message receiver (so we don't rename the player GameObject)
     private GameObject _jsMessageReceiver;
 
-    private const string SIGNAL_MESSAGE_NAME = "WebRTCSignal";
-
     // --- NGO LIFECYCLE ---
 
     public override void OnNetworkSpawn()
@@ -112,18 +110,16 @@ public class WebRTCManager : NetworkBehaviour
             isInitialized = true;
             Debug.Log($"[WebRTC] Initialized microphone for local player (ID: {localPlayerId})");
             
-            // Listen for signals from other peers
-            NetworkManager.CustomMessagingManager.RegisterNamedMessageHandler(SIGNAL_MESSAGE_NAME, OnReliableDataReceived);
-            
-            // Connect to existing players
+            // Connect to peers already present when this player object spawns.
             foreach (var client in NetworkManager.ConnectedClientsList)
             {
                 if (client.ClientId == NetworkManager.LocalClientId) continue;
                 InitiateWebRTCConnection(client.ClientId);
             }
 
-            NetworkManager.OnClientConnectedCallback += OnClientConnected;
-            NetworkManager.OnClientDisconnectCallback += OnClientDisconnected;
+            // OnClientConnectedCallback only reports the local client (and the server/session
+            // owner). DA peer joins and departures are reported through OnConnectionEvent.
+            NetworkManager.OnConnectionEvent += OnConnectionEvent;
         }
         else
         {
@@ -247,7 +243,8 @@ public class WebRTCManager : NetworkBehaviour
         {
             string peerId = clientId.ToString();
             
-            if (NetworkManager.ConnectedClients.TryGetValue(clientId, out var client))
+            if (NetworkManager.ConnectedClients.TryGetValue(clientId, out var client) &&
+                client.PlayerObject != null)
             {
                 Vector3 pos = client.PlayerObject.transform.position;
                 WebRTC_UpdatePeerPosition(peerId, pos.x, pos.y, pos.z);
@@ -261,9 +258,7 @@ public class WebRTCManager : NetworkBehaviour
         #if UNITY_WEBGL && !UNITY_EDITOR
         if (IsOwner)
         {
-            NetworkManager.OnClientConnectedCallback -= OnClientConnected;
-            NetworkManager.OnClientDisconnectCallback -= OnClientDisconnected;
-            NetworkManager.CustomMessagingManager.UnregisterNamedMessageHandler(SIGNAL_MESSAGE_NAME);
+            NetworkManager.OnConnectionEvent -= OnConnectionEvent;
 
             foreach (var peerId in connectedPeers)
             {
@@ -301,7 +296,8 @@ public class WebRTCManager : NetworkBehaviour
 
         ulong remoteClientId = ulong.Parse(peerId);
 
-        if (NetworkManager.ConnectedClients.TryGetValue(remoteClientId, out var client))
+        if (NetworkManager.ConnectedClients.TryGetValue(remoteClientId, out var client) &&
+            client.PlayerObject != null)
         {
             Debug.Log($"[WebRTC] Found PlayerObject for peer {peerId}: {client.PlayerObject.name}");
 
@@ -343,31 +339,71 @@ public class WebRTCManager : NetworkBehaviour
 
     // --- CONNECTION & SIGNALLING ---
 
-    private void OnClientConnected(ulong clientId)
+    private void OnConnectionEvent(NetworkManager networkManager, ConnectionEventData eventData)
     {
-        if (clientId == NetworkManager.LocalClientId) return;
-        InitiateWebRTCConnection(clientId);
+        if (networkManager != NetworkManager || !IsOwner)
+            return;
+
+        switch (eventData.EventType)
+        {
+            case ConnectionEvent.ClientConnected:
+                // A newly connected DA client receives the peers that were already present.
+                // This also makes the path safe if the player NetworkObject subscribes before
+                // NGO has populated ConnectedClientsList.
+                if (eventData.ClientId == NetworkManager.LocalClientId && eventData.PeerClientIds.IsCreated)
+                {
+                    foreach (ulong peerClientId in eventData.PeerClientIds)
+                    {
+                        if (peerClientId != NetworkManager.LocalClientId)
+                            InitiateWebRTCConnection(peerClientId);
+                    }
+                }
+                else if (eventData.ClientId != NetworkManager.LocalClientId)
+                {
+                    InitiateWebRTCConnection(eventData.ClientId);
+                }
+                break;
+
+            case ConnectionEvent.PeerConnected:
+                InitiateWebRTCConnection(eventData.ClientId);
+                break;
+
+            case ConnectionEvent.ClientDisconnected:
+            case ConnectionEvent.PeerDisconnected:
+                DisconnectWebRTCPeer(eventData.ClientId);
+                break;
+        }
     }
 
-    private void OnClientDisconnected(ulong clientId)
+    private void DisconnectWebRTCPeer(ulong clientId)
     {
-        if (connectedPeers.Contains(clientId))
-        {
-            WebRTC_DisconnectPeer(clientId.ToString());
-            connectedPeers.Remove(clientId);
-            _lipSyncComponents.Remove(clientId.ToString());
-        }
+        if (clientId == NetworkManager.LocalClientId || !connectedPeers.Remove(clientId))
+            return;
+
+        #if UNITY_WEBGL && !UNITY_EDITOR
+        WebRTC_DisconnectPeer(clientId.ToString());
+        #endif
+
+        string peerId = clientId.ToString();
+        _lipSyncComponents.Remove(peerId);
+        _audioBuffers.Remove(peerId);
+        _audioLevels.Remove(peerId);
+        _isSpeaking.Remove(peerId);
+        Debug.Log($"[WebRTC] Disconnected spatial voice peer {clientId}.");
     }
 
     private void InitiateWebRTCConnection(ulong clientId)
     {
         #if UNITY_WEBGL && !UNITY_EDITOR
-        if (!isInitialized) return;
+        if (!isInitialized || clientId == NetworkManager.LocalClientId || !connectedPeers.Add(clientId))
+            return;
 
-        // Deterministic initiator: the one with the lower ID
+        // Deterministic initiator: exactly one side creates the offer.
         bool shouldInitiate = NetworkManager.LocalClientId < clientId;
         WebRTC_Connect(clientId.ToString(), shouldInitiate);
-        connectedPeers.Add(clientId);
+        Debug.Log(
+            $"[WebRTC] Registered spatial voice peer {clientId}. " +
+            $"initiator={shouldInitiate}, distributedAuthority={NetworkManager.DistributedAuthorityMode}.");
         #endif
     }
 
@@ -387,30 +423,37 @@ public class WebRTCManager : NetworkBehaviour
 
     private void SendWebRTCSignal(ulong targetClientId, string jsonSignal)
     {
-        var wrapper = new SignalWrapper { senderId = (int)NetworkManager.LocalClientId, signal = jsonSignal };
-        string wrappedSignal = JsonUtility.ToJson(wrapper);
-        
-        var writer = new FastBufferWriter(wrappedSignal.Length * 2 + 4, Unity.Collections.Allocator.Temp);
-        writer.WriteValueSafe(wrappedSignal);
-        NetworkManager.CustomMessagingManager.SendNamedMessage(SIGNAL_MESSAGE_NAME, targetClientId, writer);
-        writer.Dispose();
+        if (!IsOwner || targetClientId == NetworkManager.LocalClientId)
+            return;
+
+        ReceiveWebRTCSignalRpc(
+            jsonSignal,
+            RpcTarget.Single(targetClientId, RpcTargetUse.Temp));
     }
 
-    private void OnReliableDataReceived(ulong senderId, FastBufferReader reader)
+    /// <summary>
+    /// Relays WebRTC SDP/ICE to one peer through NGO's supported targeted RPC path.
+    /// The RPC is invoked on the sender's player object, then forwarded locally to the
+    /// recipient's owned WebRTCManager, which is the only instance connected to JavaScript.
+    /// </summary>
+    [Rpc(SendTo.SpecifiedInParams, InvokePermission = RpcInvokePermission.Owner)]
+    private void ReceiveWebRTCSignalRpc(string jsonSignal, RpcParams rpcParams = default)
     {
-        reader.ReadValueSafe(out string wrappedSignal);
-        var wrapper = JsonUtility.FromJson<SignalWrapper>(wrappedSignal);
-        string jsonSignal = wrapper.signal;
+        ulong senderClientId = rpcParams.Receive.SenderClientId;
+        NetworkObject localPlayerObject = NetworkManager.LocalClient?.PlayerObject;
+        WebRTCManager localWebRtcManager = localPlayerObject != null
+            ? localPlayerObject.GetComponent<WebRTCManager>()
+            : null;
+
+        if (localWebRtcManager == null || !localWebRtcManager.IsOwner)
+        {
+            Debug.LogWarning(
+                $"[WebRTC] Could not route signaling from peer {senderClientId} to the local player.");
+            return;
+        }
 
         #if UNITY_WEBGL && !UNITY_EDITOR
-        WebRTC_HandleSignal(senderId.ToString(), jsonSignal);
+        WebRTC_HandleSignal(senderClientId.ToString(), jsonSignal);
         #endif
-    }
-
-    [Serializable]
-    private class SignalWrapper
-    {
-        public int senderId;
-        public string signal;
     }
 }

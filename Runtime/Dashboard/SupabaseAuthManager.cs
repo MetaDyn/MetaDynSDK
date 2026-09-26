@@ -339,7 +339,8 @@ namespace MetaDyn.Dashboard
         }
 
         /// <summary>
-        /// Update avatar_index in user's profile
+        /// Select a preset avatar in the user's profile. A preset choice clears the
+        /// active uploaded-model pointer without deleting the saved model or file.
         /// </summary>
         public void UpdateAvatarIndex(int avatarIndex, Action onSuccess, Action<string> onError)
         {
@@ -401,7 +402,7 @@ namespace MetaDyn.Dashboard
         {
             string url = $"{config.SupabaseUrl}/rest/v1/profiles?id=eq.{userId}";
 
-            string jsonData = $"{{\"avatar_index\":{avatarIndex}}}";
+            string jsonData = $"{{\"avatar_index\":{avatarIndex},\"active_avatar_model_id\":null}}";
             byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
 
             using (UnityWebRequest request = new UnityWebRequest(url, "PATCH"))
@@ -413,7 +414,7 @@ namespace MetaDyn.Dashboard
                 request.SetRequestHeader("Authorization", GetAuthHeader());
                 request.SetRequestHeader("Prefer", "return=minimal");
 
-                Debug.Log($"[SupabaseAuth] Updating avatar_index to {avatarIndex} for user {userId}");
+                Debug.Log($"[SupabaseAuth] Selecting preset avatar_index {avatarIndex} and clearing active uploaded avatar for user {userId}");
 
                 yield return request.SendWebRequest();
 
@@ -423,9 +424,10 @@ namespace MetaDyn.Dashboard
                     if (CurrentSession?.user?.profile != null)
                     {
                         CurrentSession.user.profile.avatar_index = avatarIndex;
+                        CurrentSession.user.profile.active_avatar_model_id = null;
                     }
 
-                    Debug.Log($"[SupabaseAuth] Avatar index updated to {avatarIndex}");
+                    Debug.Log($"[SupabaseAuth] Preset avatar index updated to {avatarIndex}; active uploaded avatar cleared");
                     onSuccess?.Invoke();
                 }
                 else
@@ -532,6 +534,7 @@ namespace MetaDyn.Dashboard
         public string name;        // Display name
         public string avatar_url;  // Profile picture URL
         public int avatar_index = -1;  // Preset avatar choice (-1 = not chosen, show picker)
+        public string active_avatar_model_id;  // Runtime uploaded GLB/VRM avatar model id
         // Note: email is NOT in profiles table - get it from SupabaseUser.email instead
 
         /// <summary>

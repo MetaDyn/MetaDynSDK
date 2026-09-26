@@ -1,7 +1,7 @@
 {
   "sdkName": "MetaDyn SDK",
   "channel": "stable",
-  "latestVersion": "1.3.2",
+  "latestVersion": "1.4.0",
   "minimumSupportedVersion": "1.1.0",
   "unity": {
     "minimumVersion": "6000.0.62f1",
@@ -9,18 +9,17 @@
   },
   "networking": {
     "provider": "Unity Gaming Services",
-    "NGO": "2.1.0",
-    "lobby": "1.2.1",
-    "relay": "1.1.0",
-    "vivox": "16.4.2"
+    "NGO": "2.7.0",
+    "multiplayer": "2.3.0",
+    "vivox": "16.10.0"
   },
   "fusion": {
     "required": false,
     "supportedVersion": "2.0.9 Stable",
     "minimumVersion": "2.0.9"
   },
-  "releaseNotesUrl": "https://github.com/MetaDyn/MetaDynSDK/releases/tag/v1.3.2",
-  "downloadUrl": "https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.3.2.zip",
+  "releaseNotesUrl": "https://github.com/MetaDyn/MetaDynSDK/releases/tag/v1.4.0",
+  "downloadUrl": "https://github.com/MetaDyn/MetaDynSDK/archive/refs/tags/v1.4.0.zip",
   "packageRoot": "Assets",
   "trackedRoots": [
     "Assets/MetaDyn",

@@ -1,4 +1,5 @@
 using MetaDyn;
+using MetaDyn.Avatar;
 using MetaDyn.Dashboard;
 using MetaDyn.UserList;
 using Unity.Collections;
@@ -50,7 +51,14 @@ namespace MetaDyn.Networking
         [Range(0f, 1f)]
         [SerializeField] private float footstepAudioVolume = 0.3f;
 
-        private readonly NetworkVariable<FixedString32Bytes> _networkedName = new();
+        private readonly NetworkVariable<FixedString32Bytes> _networkedName = new(
+            default,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Owner);
+        private readonly NetworkVariable<FixedString64Bytes> _networkedAvatarModelId = new(
+            default,
+            NetworkVariableReadPermission.Everyone,
+            NetworkVariableWritePermission.Owner);
         
         private CharacterController _characterController;
 private NetworkTransform _networkTransform;
@@ -63,25 +71,49 @@ private NetworkTransform _networkTransform;
         private bool _modelHidden;
         private bool _wasGrounded;
         private bool _isJumping;
+        private bool _migrationPresentationHidden;
         private float _airborneTime;
         private float _lastVerticalVelocity;
         private float _lastFootstepTime;
         private float _lastLandTime;
+        private AnimatorParameterSnapshot[] _pendingAvatarSwapParameters;
+        private AnimatorLayerSnapshot[] _pendingAvatarSwapLayers;
 
         private const float FootstepCooldown = 0.18f;
 private const float LandCooldown = 0.35f;
 
         public string DisplayName => _networkedName.Value.ToString();
+        public string ActiveAvatarModelId => _networkedAvatarModelId.Value.ToString();
         public bool IsEmoting { get; private set; }
         public Animator Animator => animator;
+        public static MetaDynUGSPlayerController LocalPlayer { get; private set; }
 
         public static event System.Action OnLocalPlayerReady;
+        public static event System.Action<ulong, string, string> OnChatMessageReceived;
+
+        private const int MaxChatMessageCharacters = 120;
 
         private int _animIDSpeed;
 private int _animIDGrounded;
         private int _animIDJump;
         private int _animIDFreeFall;
         private int _animIDMotionSpeed;
+
+        private struct AnimatorParameterSnapshot
+        {
+            public int Hash;
+            public AnimatorControllerParameterType Type;
+            public float FloatValue;
+            public int IntValue;
+            public bool BoolValue;
+        }
+
+        private struct AnimatorLayerSnapshot
+        {
+            public int StateHash;
+            public float NormalizedTime;
+            public float Weight;
+        }
 
         // Emote state
         private RuntimeAnimatorController _originalController;
@@ -101,6 +133,9 @@ private int _animIDGrounded;
 
             if (animator == null)
                 animator = GetComponent<Animator>();
+
+            if (animator != null)
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
 
             AssignAnimationIDs();
             ConfigureCharacterController();
@@ -124,25 +159,94 @@ private int _animIDGrounded;
 
             _nameTag = GetComponentInChildren<NameTag>(true);
             _networkedName.OnValueChanged += OnNetworkedNameChanged;
+            _networkedAvatarModelId.OnValueChanged += OnNetworkedAvatarModelChanged;
 
             if (playerInput != null)
                 playerInput.enabled = IsOwner;
 
             if (IsOwner)
             {
-                SubmitNameServerRpc(PlayerPrefs.GetString("PlayerName", "Guest " + Random.Range(100, 999)));
+                LocalPlayer = this;
+                MetaDynUGSSessionService.Instance?.ApplyInitialDistributedAuthoritySpawnPose(this);
+                PublishDisplayName(PlayerPrefs.GetString("PlayerName", "Guest " + Random.Range(100, 999)));
                 BindCamera();
                 OnLocalPlayerReady?.Invoke();
             }
 
             ApplyNetworkedName(_networkedName.Value.ToString());
+            ApplyNetworkedAvatarModel(_networkedAvatarModelId.Value.ToString());
             RegisterWithUGSUserList(_networkedName.Value.ToString());
+
+            OwnerNetworkAnimator ownerNetworkAnimator = GetComponent<OwnerNetworkAnimator>();
+            if (ownerNetworkAnimator == null)
+            {
+                Debug.LogError($"[MetaDyn UGS Player] '{name}' requires OwnerNetworkAnimator because locomotion parameters are written by the owning client.", this);
+            }
+            else if (ownerNetworkAnimator.Animator != animator)
+            {
+                Debug.LogError($"[MetaDyn UGS Player] '{name}' OwnerNetworkAnimator must reference the same root Animator as MetaDynUGSPlayerController.", this);
+            }
         }
 
         public override void OnNetworkDespawn()
         {
+            if (LocalPlayer == this)
+                LocalPlayer = null;
+
             _networkedName.OnValueChanged -= OnNetworkedNameChanged;
+            _networkedAvatarModelId.OnValueChanged -= OnNetworkedAvatarModelChanged;
             MetaDynUGSUserListManager.Instance?.UnregisterPlayer(OwnerClientId);
+            GLBAvatarLoader.Instance?.ReleaseAvatarResources(OwnerClientId);
+        }
+
+        public bool TrySendChatMessage(string message)
+        {
+            if (!IsOwner || !IsSpawned || NetworkManager == null || !NetworkManager.IsConnectedClient)
+                return false;
+
+            string sanitizedMessage = SanitizeChatMessage(message);
+            if (string.IsNullOrEmpty(sanitizedMessage))
+                return false;
+
+            SendChatMessageRpc(new FixedString512Bytes(sanitizedMessage));
+            return true;
+        }
+
+        [Rpc(SendTo.Everyone, InvokePermission = RpcInvokePermission.Owner)]
+        private void SendChatMessageRpc(FixedString512Bytes message)
+        {
+            string sanitizedMessage = SanitizeChatMessage(message.ToString());
+            if (string.IsNullOrEmpty(sanitizedMessage))
+                return;
+
+            string senderName = DisplayName;
+            if (string.IsNullOrWhiteSpace(senderName))
+                senderName = IsOwner
+                    ? PlayerPrefs.GetString("PlayerName", $"Player {OwnerClientId}")
+                    : $"Player {OwnerClientId}";
+
+            OnChatMessageReceived?.Invoke(OwnerClientId, senderName, sanitizedMessage);
+        }
+
+        private static string SanitizeChatMessage(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return string.Empty;
+
+            string sanitized = message
+                .Replace('\0', ' ')
+                .Replace('\r', ' ')
+                .Replace('\n', ' ')
+                .Trim();
+
+            if (sanitized.Length <= MaxChatMessageCharacters)
+                return sanitized;
+
+            sanitized = sanitized.Substring(0, MaxChatMessageCharacters);
+            if (sanitized.Length > 0 && char.IsHighSurrogate(sanitized[sanitized.Length - 1]))
+                sanitized = sanitized.Substring(0, sanitized.Length - 1);
+
+            return sanitized.TrimEnd();
         }
 
         private void Update()
@@ -150,7 +254,7 @@ private int _animIDGrounded;
             if (IsOwner && playerInput != null)
             {
                 var input = playerInput.CurrentInput;
-                
+
                 // Block movement input if emoted and movement is not allowed
                 bool blockMovement = IsEmoting && EmoteManager.Instance != null && !EmoteManager.Instance.allowMovementDuringEmote;
 
@@ -198,17 +302,11 @@ private int _animIDGrounded;
         public void RequestPlayEmote(int index)
         {
             if (!IsOwner) return;
-            PlayEmoteServerRpc(index);
+            PlayEmoteRpc(index);
         }
 
-        [ServerRpc]
-        private void PlayEmoteServerRpc(int index)
-        {
-            PlayEmoteClientRpc(index);
-        }
-
-        [ClientRpc]
-        private void PlayEmoteClientRpc(int index)
+        [Rpc(SendTo.Everyone, InvokePermission = RpcInvokePermission.Owner)]
+        private void PlayEmoteRpc(int index)
         {
             PlayEmoteLocal(index);
         }
@@ -285,9 +383,11 @@ private int _animIDGrounded;
 
         #endregion
 
-        [ServerRpc]
-        private void SubmitNameServerRpc(string playerName)
+        private void PublishDisplayName(string playerName)
         {
+            if (!IsSpawned || !IsOwner)
+                return;
+
             if (string.IsNullOrWhiteSpace(playerName))
                 playerName = "Guest " + Random.Range(100, 999);
 
@@ -295,8 +395,8 @@ private int _animIDGrounded;
                 playerName = playerName.Substring(0, 31);
 
             _networkedName.Value = playerName;
-            MetaDynUGSUserListManager.Instance?.RegisterPlayer(OwnerClientId, playerName, GetSupabaseUserId());
-            Debug.Log($"[MetaDyn SPAWN] Name set for client {OwnerClientId}: {playerName}");
+            RegisterWithUGSUserList(playerName);
+            Debug.Log($"[MetaDyn SPAWN] Owner published name for client {OwnerClientId}: {playerName}");
         }
 
         private static string GetSupabaseUserId()
@@ -398,7 +498,12 @@ private int _animIDGrounded;
 
             _cameraFollow.target = transform;
             _cameraFollow.inputSource = playerInput;
-            _cameraFollow.InitializeCameraRotation(transform.eulerAngles.y);
+
+            MetaDynUGSMigrationState migrationState = MetaDynUGSSessionService.Instance.MigrationState;
+            bool preserveMigrationView = migrationState == MetaDynUGSMigrationState.MigrationDetected ||
+                                         migrationState == MetaDynUGSMigrationState.RestartingNetwork;
+            if (!preserveMigrationView)
+                _cameraFollow.InitializeCameraRotation(transform.eulerAngles.y);
         }
 
         private void UpdateAnimator()
@@ -460,6 +565,175 @@ private int _animIDGrounded;
         public void RefreshModelRenderers()
         {
             CacheModelRenderers();
+            ApplyMigrationPresentationVisibility();
+        }
+
+        /// <summary>
+        /// Temporarily suppresses only the replacement player's renderers while a
+        /// preserved migration visual remains on screen. Input and movement remain live.
+        /// </summary>
+        public void SetMigrationPresentationHidden(bool hidden)
+        {
+            _migrationPresentationHidden = hidden;
+            ApplyMigrationPresentationVisibility();
+        }
+
+        public void RefreshAnimatorAfterAvatarSwap()
+        {
+            if (animator == null)
+                return;
+
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+
+            if (IsOwner)
+                ApplyOwnerLocomotionParameters();
+
+            animator.Update(0f);
+        }
+
+        /// <summary>
+        /// Captures synchronized proxy state before the current runtime skeleton hierarchy
+        /// is removed. The captured values are consumed by ApplyRuntimeAvatar.
+        /// </summary>
+        public void PrepareAnimatorForAvatarSwap()
+        {
+            if (animator == null)
+                return;
+
+            _pendingAvatarSwapParameters = CaptureAnimatorParameters();
+            _pendingAvatarSwapLayers = CaptureAnimatorLayers();
+        }
+
+        /// <summary>
+        /// Rebinds the root Animator to a runtime humanoid avatar without discarding the
+        /// locomotion state already synchronized to this client by OwnerNetworkAnimator.
+        /// </summary>
+        public void ApplyRuntimeAvatar(UnityEngine.Avatar runtimeAvatar)
+        {
+            if (animator == null || runtimeAvatar == null || !runtimeAvatar.isValid)
+                return;
+
+            AnimatorParameterSnapshot[] parameterSnapshots = _pendingAvatarSwapParameters ?? CaptureAnimatorParameters();
+            AnimatorLayerSnapshot[] layerSnapshots = _pendingAvatarSwapLayers ?? CaptureAnimatorLayers();
+            _pendingAvatarSwapParameters = null;
+            _pendingAvatarSwapLayers = null;
+
+            animator.avatar = runtimeAvatar;
+            animator.Rebind();
+            animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+
+            RestoreAnimatorParameters(parameterSnapshots);
+            RestoreAnimatorLayers(layerSnapshots);
+
+            // The owner remains the source of truth. Reapply its current controller values
+            // without damping so NetworkAnimator observes a coherent post-rebind state.
+            if (IsOwner)
+                ApplyOwnerLocomotionParameters();
+
+            animator.Update(0f);
+        }
+
+        private AnimatorParameterSnapshot[] CaptureAnimatorParameters()
+        {
+            AnimatorControllerParameter[] parameters = animator.parameters;
+            var snapshots = new List<AnimatorParameterSnapshot>(parameters.Length);
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                AnimatorControllerParameter parameter = parameters[i];
+                var snapshot = new AnimatorParameterSnapshot
+                {
+                    Hash = parameter.nameHash,
+                    Type = parameter.type
+                };
+
+                switch (parameter.type)
+                {
+                    case AnimatorControllerParameterType.Float:
+                        snapshot.FloatValue = animator.GetFloat(parameter.nameHash);
+                        break;
+                    case AnimatorControllerParameterType.Int:
+                        snapshot.IntValue = animator.GetInteger(parameter.nameHash);
+                        break;
+                    case AnimatorControllerParameterType.Bool:
+                        snapshot.BoolValue = animator.GetBool(parameter.nameHash);
+                        break;
+                    default:
+                        // Triggers are event-like and cannot be reconstructed reliably.
+                        continue;
+                }
+
+                snapshots.Add(snapshot);
+            }
+
+            return snapshots.ToArray();
+        }
+
+        private AnimatorLayerSnapshot[] CaptureAnimatorLayers()
+        {
+            var snapshots = new AnimatorLayerSnapshot[animator.layerCount];
+
+            for (int layer = 0; layer < animator.layerCount; layer++)
+            {
+                AnimatorStateInfo state = animator.IsInTransition(layer)
+                    ? animator.GetNextAnimatorStateInfo(layer)
+                    : animator.GetCurrentAnimatorStateInfo(layer);
+
+                snapshots[layer] = new AnimatorLayerSnapshot
+                {
+                    StateHash = state.fullPathHash,
+                    NormalizedTime = state.normalizedTime,
+                    Weight = animator.GetLayerWeight(layer)
+                };
+            }
+
+            return snapshots;
+        }
+
+        private void RestoreAnimatorParameters(AnimatorParameterSnapshot[] snapshots)
+        {
+            for (int i = 0; i < snapshots.Length; i++)
+            {
+                AnimatorParameterSnapshot snapshot = snapshots[i];
+                switch (snapshot.Type)
+                {
+                    case AnimatorControllerParameterType.Float:
+                        animator.SetFloat(snapshot.Hash, snapshot.FloatValue);
+                        break;
+                    case AnimatorControllerParameterType.Int:
+                        animator.SetInteger(snapshot.Hash, snapshot.IntValue);
+                        break;
+                    case AnimatorControllerParameterType.Bool:
+                        animator.SetBool(snapshot.Hash, snapshot.BoolValue);
+                        break;
+                }
+            }
+        }
+
+        private void RestoreAnimatorLayers(AnimatorLayerSnapshot[] snapshots)
+        {
+            int layerCount = Mathf.Min(snapshots.Length, animator.layerCount);
+            for (int layer = 0; layer < layerCount; layer++)
+            {
+                AnimatorLayerSnapshot snapshot = snapshots[layer];
+                animator.SetLayerWeight(layer, snapshot.Weight);
+
+                if (snapshot.StateHash != 0 && animator.HasState(layer, snapshot.StateHash))
+                    animator.Play(snapshot.StateHash, layer, snapshot.NormalizedTime);
+            }
+        }
+
+        private void ApplyOwnerLocomotionParameters()
+        {
+            float currentSpeed = _moveVelocity.magnitude;
+            bool grounded = _wasGrounded || (_characterController != null && _characterController.isGrounded) || IsGrounded();
+            bool isFreeFalling = !grounded && _verticalVelocity < -10f;
+
+            animator.SetFloat(_animIDSpeed, currentSpeed);
+            animator.SetFloat(_animIDMotionSpeed, 1f);
+            animator.SetBool(_animIDGrounded, grounded);
+            animator.SetBool(_animIDJump, _isJumping);
+            animator.SetBool(_animIDFreeFall, isFreeFalling);
         }
 
         public Transform ModelRoot
@@ -489,7 +763,18 @@ private int _animIDGrounded;
             for (int i = 0; i < _modelRenderers.Length; i++)
             {
                 if (_modelRenderers[i] != null)
-                    _modelRenderers[i].enabled = !_modelHidden;
+                    _modelRenderers[i].enabled = !_modelHidden && !_migrationPresentationHidden;
+            }
+        }
+
+        private void ApplyMigrationPresentationVisibility()
+        {
+            if (_modelRenderers == null) return;
+
+            for (int i = 0; i < _modelRenderers.Length; i++)
+            {
+                if (_modelRenderers[i] != null)
+                    _modelRenderers[i].enabled = !_modelHidden && !_migrationPresentationHidden;
             }
         }
 
@@ -511,12 +796,51 @@ private int _animIDGrounded;
             if (string.IsNullOrWhiteSpace(playerName))
                 return;
 
-            MetaDynUGSUserListManager.Instance?.RegisterPlayer(OwnerClientId, playerName, GetSupabaseUserId());
+            // The roster is local/event-derived. Only the locally owned player may be
+            // compared with this browser's authenticated Supabase identity. A remote
+            // proxy must never inherit or expose the viewing user's account identity.
+            string localUserId = IsOwner ? GetSupabaseUserId() : string.Empty;
+            MetaDynUGSUserListManager.Instance?.RegisterPlayer(OwnerClientId, playerName, localUserId);
         }
 
         public void RefreshUserListRegistration()
         {
             RegisterWithUGSUserList(_networkedName.Value.ToString());
+        }
+
+        public void PublishCustomAvatarModel(string avatarModelId)
+        {
+            if (!IsSpawned || !IsOwner || string.IsNullOrWhiteSpace(avatarModelId))
+                return;
+
+            if (avatarModelId.Length > 63)
+                avatarModelId = avatarModelId.Substring(0, 63);
+
+            _networkedAvatarModelId.Value = avatarModelId;
+            Debug.Log($"[MetaDyn UGS Player] Published custom avatar model '{avatarModelId}' for client {OwnerClientId}.");
+        }
+
+        private void OnNetworkedAvatarModelChanged(FixedString64Bytes previous, FixedString64Bytes current)
+        {
+            ApplyNetworkedAvatarModel(current.ToString());
+        }
+
+        private void ApplyNetworkedAvatarModel(string avatarModelId)
+        {
+            if (IsOwner || string.IsNullOrWhiteSpace(avatarModelId))
+                return;
+
+            GLBAvatarLoader loader = GLBAvatarLoader.Instance != null
+                ? GLBAvatarLoader.Instance
+                : FindFirstObjectByType<GLBAvatarLoader>();
+
+            if (loader == null)
+            {
+                Debug.LogWarning($"[MetaDyn UGS Player] Cannot load remote avatar model '{avatarModelId}': GLBAvatarLoader not found.");
+                return;
+            }
+
+            loader.LoadAndApplyStoredAvatar(avatarModelId, this);
         }
 
         private void AssignAnimationIDs()
