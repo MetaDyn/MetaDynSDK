@@ -1,7 +1,7 @@
 {
   "name": "com.metadyn.sdk",
   "displayName": "MetaDyn Master SDK",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "unity": "6000.0",
   "description": "Enterprise-grade spatial AI and networking SDK for Unity Gaming Services.",
   "keywords": [
@@ -19,6 +19,13 @@
     "com.unity.cloud.gltfast": "6.14.1",
     "com.unity.ugui": "2.0.0"
   },
+  "samples": [
+    {
+      "displayName": "Picture Frame WebGL Bridge",
+      "description": "Browser image picker required for MetaDynEmptyFrame uploads in WebGL builds.",
+      "path": "Samples~/PictureFrameWebGL"
+    }
+  ],
   "author": {
     "name": "MetaDyn",
     "url": "https://metadyn.xyz"

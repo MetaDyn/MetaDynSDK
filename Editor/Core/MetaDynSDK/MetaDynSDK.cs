@@ -6,7 +6,7 @@ namespace MetaDyn
     public static class MetaDynSDK
     {
         public const string SDK_NAME = "MetaDyn SDK";
-        public const string SDK_VERSION = "1.4.0";
+        public const string SDK_VERSION = "1.5.0";
         public const string SUPPORTED_NGO_VERSION = "2.7.0";
         public const string SUPPORTED_VIVOX_VERSION = "16.10.0";
         public const string MENU_ROOT = "Tools/MetaDyn/";

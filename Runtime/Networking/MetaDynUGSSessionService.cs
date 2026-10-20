@@ -202,16 +202,8 @@ namespace MetaDyn.Networking
                 // 2. Forced Cleanup (Must leave existing sessions via API first)
                 if (CurrentSession != null) await LeaveSessionAsync();
 
-                // 3. Programmatic Transport Enforcement (Critical for WebGL/Mobile)
-                var transport = networkManager.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
-                if (transport != null)
-                {
-                    // Force Relay + WebSockets for WebGL compliance
-#if UNITY_WEBGL
-                    transport.UseWebSockets = true;
-#endif
-                    Debug.Log($"[MetaDyn UGS] Transport forced to WebSockets: {transport.UseWebSockets}");
-                }
+                // 3. Configure the transport MPS will actually use for the selected Relay protocol.
+                ConfigureRelayTransports(networkManager);
 
                 string deterministicName = Regex.Replace(config.spaceId, @"[^a-zA-Z0-9\-]", "");
                 string sessionScope = BuildSessionScope(
@@ -675,12 +667,11 @@ namespace MetaDyn.Networking
 
         private static NetworkOptions CreateNetworkOptions()
         {
-            // WebGL requires WebSocket Secure (WSS) to communicate with Relay.
-            // Native platforms (Editor, Android, iOS) should use UDP for performance.
+            // Unity's Relay package permits only WSS when WebGL is the active
+            // build target, including Editor Play Mode.
             var protocol = RelayProtocol.UDP;
             
 #if UNITY_WEBGL
-            // Force WSS for all WebGL environments (including Editor WebGL target)
             protocol = RelayProtocol.WSS;
 #endif
 
@@ -688,6 +679,40 @@ namespace MetaDyn.Networking
             {
                 RelayProtocol = protocol
             };
+        }
+
+        private void ConfigureRelayTransports(NetworkManager networkManager)
+        {
+#if UNITY_WEBGL
+            const bool useWebSockets = true;
+#else
+            const bool useWebSockets = false;
+#endif
+            var transport = networkManager.GetComponent<Unity.Netcode.Transports.UTP.UnityTransport>();
+            if (transport != null)
+                transport.UseWebSockets = useWebSockets;
+
+            if (IsDistributedAuthority)
+            {
+                // MPS replaces UnityTransport with its internal DA subclass during
+                // startup. Prepare that component first so its driver matches Relay.
+                Type daTransportType = typeof(SessionException).Assembly.GetType(
+                    "Unity.Services.DistributedAuthority.DistributedAuthorityTransport");
+                if (daTransportType == null ||
+                    !typeof(Unity.Netcode.Transports.UTP.UnityTransport).IsAssignableFrom(daTransportType))
+                    throw new InvalidOperationException("UGS Distributed Authority transport is unavailable.");
+
+                var daTransport = networkManager.GetComponent(daTransportType) as
+                    Unity.Netcode.Transports.UTP.UnityTransport;
+                if (daTransport == null)
+                    daTransport = networkManager.gameObject.AddComponent(daTransportType) as
+                        Unity.Netcode.Transports.UTP.UnityTransport;
+                if (daTransport == null)
+                    throw new InvalidOperationException("UGS Distributed Authority transport could not be created.");
+                daTransport.UseWebSockets = useWebSockets;
+            }
+
+            Debug.Log($"[MetaDyn UGS] Relay transport WebSockets: {useWebSockets}.");
         }
 
         private static string ResolveRelayRegion(string configuredRegion)
